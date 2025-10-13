@@ -1,0 +1,7 @@
+[theme]
+# デフォルトのテーマを "light" に設定
+base = "light"
+
+[client]
+# Streamlitのツールバーを非表示にする
+toolbarMode = "minimal"
