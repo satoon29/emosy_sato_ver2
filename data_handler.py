@@ -25,8 +25,8 @@ def initialize_firebase():
     return firestore.client()
 
 @st.cache_data(ttl=600)
-# ▼▼▼【変更点】関数名と引数daysを追加 ▼▼▼
-def fetch_emotion_data(_db_client, end_date, days: int):
+# ▼▼▼【変更点】user_idを引数で受け取るように修正 ▼▼▼
+def fetch_emotion_data(_db_client, end_date, days: int, user_id: str):
     """指定された終了日から過去N日分のデータをFirestoreから取得する"""
     if _db_client is None:
         return pd.DataFrame()
@@ -34,13 +34,6 @@ def fetch_emotion_data(_db_client, end_date, days: int):
     # ▼▼▼【変更点】指定された日数分のリストを生成 ▼▼▼
     dates_to_fetch = [(end_date - timedelta(days=i)).strftime("%Y/%m/%d") for i in range(days)]
     
-    params = st.query_params
-    user_id = params.get("user_id")
-    if user_id is None or len(user_id) == 0:
-        user_id = "test00"  # デフォルトのユーザーID
-    else:
-        user_id = user_id[0]  # リストから最初の値を取得
-
     query = _db_client.collection("users").document(user_id).collection("emotions").where(filter=FieldFilter("day", "in", dates_to_fetch))
     docs = query.stream()
     

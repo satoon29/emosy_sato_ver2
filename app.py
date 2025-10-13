@@ -32,6 +32,9 @@ def main():
     if db is None:
         st.stop()
 
+    # URLのクエリパラメータからuser_idを取得
+    user_id = st.query_params.get("user_id", "test00")
+
     # ▼▼▼【変更点】st.tabsの代わりにst.radioを使い、処理を1回にする ▼▼▼
     
     # ラジオボタンで表示期間を選択（タブのように見せる）
@@ -45,11 +48,11 @@ def main():
 
     # 共通の処理を担う関数を定義
     def display_dashboard(days: int):
-        # 期間を指定してデータを取得
-        df = fetch_emotion_data(db, st.session_state.current_date, days=days)
+        # 期間とユーザーIDを指定してデータを取得
+        df = fetch_emotion_data(db, st.session_state.current_date, days=days, user_id=user_id)
         
         # ヘッダーを表示
-        render_header(df, st.session_state.current_date, days=days)
+        render_header(df, st.session_state.current_date, days=days, user_id=user_id)
 
         if df.empty:
             st.markdown(f"<p style='font-size: 24px'>この期間の記録はありません。</p>", unsafe_allow_html=True)
