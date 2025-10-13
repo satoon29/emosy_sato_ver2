@@ -1,3 +1,4 @@
 # .gitignore
 emoji-test-aad3a-firebase-adminsdk-fbsvc-e64f2c69e2.json
 old/
+etc/secrets/

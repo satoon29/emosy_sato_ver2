@@ -20,6 +20,11 @@ def load_css(file_name):
     with open(file_name) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
+def format_date_jp(dt):
+    weekdays_jp = ['月', '火', '水', '木', '金', '土', '日']
+    weekday_str = weekdays_jp[dt.weekday()]
+    return dt.strftime(f'%Y年%m月%d日 ({weekday_str})')
+
 def render_header(df, current_date, days: int):
     """ヘッダー部分（タイトル、日付ナビゲーション、記録数）を表示する"""
     col1, col2, col3, col4 = st.columns([1.5, 1.5, 1, 6])
@@ -34,14 +39,14 @@ def render_header(df, current_date, days: int):
             st.session_state.current_date += timedelta(days=1)
             st.rerun()
 
-    locale.setlocale(locale.LC_TIME, 'ja_JP.UTF-8')
+    #locale.setlocale(locale.LC_TIME, 'ja_JP.UTF-8')
 
     if days == 1:
-        title_date_str = current_date.strftime('%Y年%m月%d日 (%a)')
+        title_date_str = format_date_jp(current_date)
     else:
         start_date = current_date - timedelta(days=days - 1)
-        start_date_str = start_date.strftime('%Y年%m月%d日 (%a)')
-        end_date_str = current_date.strftime('%Y年%m月%d日 (%a)')
+        start_date_str = format_date_jp(start_date)
+        end_date_str = format_date_jp(current_date)
         title_date_str = f"{start_date_str} 〜 {end_date_str}"
     
     st.markdown(f"<h1 class='main-title'>{title_date_str}</h1>", unsafe_allow_html=True)
