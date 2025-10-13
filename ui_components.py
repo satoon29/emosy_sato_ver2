@@ -50,7 +50,7 @@ def render_header(df, current_date, days: int, user_id: str):
         title_date_str = f"{start_date_str} 〜 {end_date_str}"
     
     st.markdown(f"<h1 class='main-title'>{title_date_str}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p class='subtitle'>ユーザー: {user_id} | この期間に{len(df)}個の絵文字を記録しました！</p>", unsafe_allow_html=True)
+    st.markdown(f"<p class='subtitle'>この期間に{len(df)}個の絵文字を記録しました！</p>", unsafe_allow_html=True)
     st.divider()
 
 
