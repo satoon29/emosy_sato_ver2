@@ -1,7 +1,7 @@
 # --- 設定項目 ---
 
 # Firebaseの認証情報ファイルのパスを指定
-FIREBASE_CREDENTIALS_PATH = "/etc/secrets/emoji-test-aad3a-firebase-adminsdk-fbsvc-e64f2c69e2.json"
+FIREBASE_CREDENTIALS_PATH = "emoji-test-aad3a-firebase-adminsdk-fbsvc-e64f2c69e2.json"
 
 # データを取得するユーザーID（デバッグ用）
 USER_ID = "test00"

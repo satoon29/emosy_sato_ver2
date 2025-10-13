@@ -7,7 +7,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import os
 import folium
 from streamlit_folium import st_folium
-import locale
+#import locale
 from datetime import timedelta, datetime, time
 
 
