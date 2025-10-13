@@ -6,18 +6,21 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 # 設定値をconfig.pyからインポート
-from config import FIREBASE_CREDENTIALS_PATH
+#from config import FIREBASE_CREDENTIALS_PATH
 
 @st.cache_resource
 def initialize_firebase():
     """Firebaseへの接続を初期化し、クライアントを返す"""
     if not firebase_admin._apps:
         try:
-            cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            cred_dict = dict(st.secrets["firebase_credentials"])
+            cred = credentials.Certificate(cred_dict)
+            #cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
             firebase_admin.initialize_app(cred)
         except Exception as e:
             st.error(f"Firebaseの初期化に失敗しました: {e}")
-            st.error(f"'{FIREBASE_CREDENTIALS_PATH}' のパスが正しいか確認してください。")
+            #st.error(f"'{FIREBASE_CREDENTIALS_PATH}' のパスが正しいか確認してください。")
+            st.write(st.secrets.to_dict())
             return None
     return firestore.client()
 
