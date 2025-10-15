@@ -6,14 +6,19 @@ import os
 
 # 各ファイルから必要なものをインポート
 from config import JAPANESE_FONT_PATH
-from data_handler import initialize_firebase, fetch_emotion_data 
+from data_handler import (
+    initialize_firebase, 
+    fetch_emotion_data,
+    fetch_all_emotion_data,
+    process_for_cumulative_chart
+)
 from ui_components import (
     load_css,
     render_header,
     render_valence_timeseries,
     render_emoji_map,
     render_input_history,
-    render_cumulative_chart
+    render_cumulative_chart,
 )
 
 def main():
@@ -36,39 +41,60 @@ def main():
     # URLのクエリパラメータからuser_idを取得
     user_id = st.query_params.get("user_id", "test00")
 
-    # ▼▼▼【変更点】st.tabsの代わりにst.radioを使い、処理を1回にする ▼▼▼
+    # ▼▼▼【変更点】表示モードの選択を1つにまとめる ▼▼▼
     
-    # ラジオボタンで表示期間を選択（タブのように見せる）
-    period_options = {"1日間": 1, "3日間": 3, "1週間": 7}
-    selected_period = st.radio(
-        "表示期間を選択",
-        options=period_options.keys(),
+    # ラジオボタンで表示モードを選択
+    view_options = ["1日間", "3日間", "累積分析"]
+    selected_view = st.radio(
+        "表示モードを選択",
+        options=view_options,
         horizontal=True,
-        label_visibility="collapsed" # "表示期間を選択"のラベルを非表示にする
+        label_visibility="collapsed"
     )
 
-    # 共通の処理を担う関数を定義
-    def display_dashboard(days: int):
-        # 期間とユーザーIDを指定してデータを取得
-        df = fetch_emotion_data(db, st.session_state.current_date, days=days, user_id=user_id)
+    if selected_view == "1日間":
+        display_dashboard(db, user_id, days=1)
+    
+    elif selected_view == "3日間":
+        display_dashboard(db, user_id, days=3)
+
+    elif selected_view == "累積分析":
+        # 全期間のデータを取得して処理
+        all_data = fetch_all_emotion_data(db, user_id)
+        cumulative_df = process_for_cumulative_chart(all_data)
         
-        # ヘッダーを表示
-        render_header(df, st.session_state.current_date, days=days, user_id=user_id)
-
-        if df.empty:
-            st.markdown(f"<p style='font-size: 24px'>この期間の記録はありません。</p>", unsafe_allow_html=True)
-            return
-
-        # 各UIコンポーネントを描画
-        render_valence_timeseries(df, st.session_state.current_date, days=days)
+        # ヘッダーと累積グラフを描画
+        # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
+        st.markdown(f"<h1 class='main-title'>感情クラスタの時間帯別 構成比</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p class='subtitle'>全期間のデータを集計</p>", unsafe_allow_html=True)
         st.divider()
-        render_emoji_map(df, days=days)
+        render_cumulative_chart(cumulative_df)
+        
+        # 全期間の地図と履歴も表示
         st.divider()
-        render_input_history(df)
+        render_emoji_map(all_data, days=0) # days=0は累積分析用のユニークキーとして使用
+        st.divider()
+        render_input_history(all_data)
 
-    # 選択された期間に応じてダッシュボードを一度だけ表示
-    display_dashboard(days=period_options[selected_period])
-    render_cumulative_chart(fetch_emotion_data(db, st.session_state.current_date, days=7, user_id=user_id))
+
+def display_dashboard(db, user_id, days: int):
+    """期間別ダッシュボードを表示する共通関数"""
+    # 期間とユーザーIDを指定してデータを取得
+    df = fetch_emotion_data(db, st.session_state.current_date, days=days, user_id=user_id)
+    
+    # ヘッダーを表示
+    render_header(df, st.session_state.current_date, days=days, user_id=user_id)
+
+    if df.empty:
+        st.markdown(f"<p style='font-size: 24px'>この期間の記録はありません。</p>", unsafe_allow_html=True)
+        return
+
+    # 各UIコンポーネントを描画
+    render_valence_timeseries(df, st.session_state.current_date, days=days)
+    st.divider()
+    render_emoji_map(df, days=days)
+    st.divider()
+    render_input_history(df)
 
 
 if __name__ == "__main__":

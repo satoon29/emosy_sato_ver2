@@ -49,3 +49,70 @@ def fetch_emotion_data(_db_client, end_date, days: int, user_id: str):
     df.sort_index(inplace=True)
     return df
 
+@st.cache_data(ttl=600)
+def fetch_all_emotion_data(_db_client, user_id: str):
+    """全期間の感情データをFirestoreから取得する"""
+    if _db_client is None:
+        return pd.DataFrame()
+
+    query = _db_client.collection("users").document(user_id).collection("emotions")
+    docs = query.stream()
+    
+    records = []
+    for doc in docs:
+        record = doc.to_dict()
+        record['doc_id'] = doc.id
+        records.append(record)
+
+    if not records:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame(records)
+    df['datetime'] = pd.to_datetime(df['day'] + ' ' + df['time'], format='%Y/%m/%d %H:%M', errors='coerce')
+    df.dropna(subset=['datetime', 'valence'], inplace=True)
+    df['valence'] = pd.to_numeric(df['valence'])
+    return df
+
+def assign_cluster(valence):
+    """Valence値に基づいてクラスタを割り当てる"""
+    if valence <= 3.5:
+        return '強いネガティブ'
+    elif valence <= 4.5:
+        return '弱いネガティブ'
+    elif valence <= 5.2:
+        return 'ネガティブ寄り中立'
+    elif valence <= 6.0:
+        return 'ポジティブ寄り中立'
+    elif valence <= 7.6:
+        return '弱いポジティブ'
+    else:
+        return '強いポジティブ'
+
+def process_for_cumulative_chart(df):
+    """【修正】時間帯ごとのクラスタ構成比を計算する"""
+    if df.empty:
+        return pd.DataFrame()
+
+    df['cluster'] = df['valence'].apply(assign_cluster)
+    df['hour'] = df['datetime'].dt.hour
+
+    clusters = [
+        '強いネガティブ', '弱いネガティブ', 'ネガティブ寄り中立',
+        'ポジティブ寄り中立', '弱いポジティブ', '強いポジティブ'
+    ]
+    
+    # 時間帯ごとに各クラスタの出現回数を集計
+    hourly_counts = pd.crosstab(df['hour'], df['cluster'])
+    
+    # 全てのクラスタ列が存在するように整形
+    hourly_counts = hourly_counts.reindex(columns=clusters, fill_value=0)
+    
+    # 各時間帯（各行）の合計が100%になるように構成比を計算
+    hourly_percentage = hourly_counts.div(hourly_counts.sum(axis=1), axis=0).fillna(0) * 100
+    
+    # 9時から19時までのインデックスを作成し、データのない時間帯も0で埋める
+    all_hours_index = pd.Index(range(9, 20), name='hour')
+    hourly_percentage = hourly_percentage.reindex(all_hours_index, fill_value=0)
+    
+    return hourly_percentage
+

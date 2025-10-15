@@ -141,11 +141,11 @@ def render_emoji_map(df, days: int):
             return
 
         # 記録された位置情報の平均値を計算
-        mean_lat = map_df['lat'].mean()
-        mean_lng = map_df['lng'].mean()
+        # mean_lat = map_df['lat'].mean()
+        # mean_lng = map_df['lng'].mean()
 
-        # foliumを使用して地図を作成 (初期位置を平均値に設定、タイルをグレースケールに変更)
-        m = folium.Map(location=[mean_lat, mean_lng], zoom_start=15, tiles='CartoDB positron')
+        # foliumを使用して地図を作成 (初期位置を固定座標に設定、タイルをグレースケールに変更)
+        m = folium.Map(location=[34.80914072819409, 135.5609309911741], zoom_start=15, tiles='CartoDB positron')
 
         # データポイントを絵文字アイコンとして追加
         for _, row in map_df.iterrows():
@@ -190,39 +190,41 @@ def render_input_history(df):
 
 
 def render_cumulative_chart(df):
-    """感情クラスタの累積割合グラフを描画する"""
-    st.subheader("感情クラスタの1日累積割合")
+    """【修正】感情クラスタの時間帯別構成比グラフ（積層面グラフ）を描画する"""
+    st.subheader("感情クラスタの時間帯別 構成比（全期間）")
     
     if df.empty:
         st.warning("表示するデータがありません。")
         return
 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots(figsize=(14, 7))
 
     clusters = [
-        '強いポジティブ', '弱いポジティブ', 'ポジティブ寄り中立',
-        'ネガティブ寄り中立', '弱いネガティブ', '強いネガティブ'
+        '強いネガティブ', '弱いネガティブ', 'ネガティブ寄り中立',
+        'ポジティブ寄り中立', '弱いポジティブ', '強いポジティブ'
     ]
-    colors = ['#ff9999', '#ffc000', '#ffff00', '#ccffcc', '#99ccff', '#c4a3d5']
+    colors = ['#c4a3d5', '#99ccff', '#ccffcc', '#ffff00', '#ffc000', '#ff9999']
     
     # データをプロット
     x = df.index
-    # Y軸は各クラスタの割合を累積させたもの
+    # Y軸は各クラスタの割合
+    # stackplotに入力するために、各列をリストとして渡す
     y = [df[c] for c in clusters]
     
     ax.stackplot(x, y, labels=clusters, colors=colors, alpha=0.8)
 
     # グラフの書式設定
-    ax.set_xlim(datetime.combine(x.min().date(), time.min), datetime.combine(x.min().date(), time.max))
     ax.set_ylim(0, 100)
-    ax.set_ylabel('累積割合 (%)', fontsize=16)
-    ax.set_xlabel('時刻', fontsize=16)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
-    plt.setp(ax.get_xticklabels(), fontsize=12, rotation=30, ha='right')
+    ax.set_ylabel('構成比 (%)', fontsize=16)
+    ax.set_xlabel('時間帯', fontsize=16)
+    
+    # X軸の目盛りとラベルを設定
+    ax.set_xticks(df.index)
+    ax.set_xticklabels([f'{h}:00' for h in df.index], rotation=45, ha='right', fontsize=12)
+    ax.set_xlim(df.index.min(), df.index.max())
     
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.grid(axis='y', linestyle='--', linewidth=0.5)
     plt.tight_layout(rect=[0, 0, 0.85, 1]) # 凡例が収まるように調整
     
     st.pyplot(fig)
