@@ -70,11 +70,9 @@ def main():
         st.divider()
         render_cumulative_chart(cumulative_df)
         
-        # 全期間の地図と履歴も表示
+        # 全期間の地図を表示
         st.divider()
         render_emoji_map(all_data, days=0) # days=0は累積分析用のユニークキーとして使用
-        st.divider()
-        render_input_history(all_data)
 
 
 def display_dashboard(db, user_id, days: int):

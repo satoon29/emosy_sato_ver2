@@ -6,7 +6,7 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 # 設定値をconfig.pyからインポート
-#from config import FIREBASE_CREDENTIALS_PATH
+# from config import FIREBASE_CREDENTIALS_PATH
 
 @st.cache_resource
 def initialize_firebase():
@@ -71,6 +71,7 @@ def fetch_all_emotion_data(_db_client, user_id: str):
     df['datetime'] = pd.to_datetime(df['day'] + ' ' + df['time'], format='%Y/%m/%d %H:%M', errors='coerce')
     df.dropna(subset=['datetime', 'valence'], inplace=True)
     df['valence'] = pd.to_numeric(df['valence'])
+    
     return df
 
 def assign_cluster(valence):
