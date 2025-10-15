@@ -187,3 +187,42 @@ def render_input_history(df):
             list_items_html += f"<div class='history-item'><span>{row['絵文字']}</span><span class='history-time'>{row['記録']}</span></div>"
     full_html = f"<div class='history-wrapper'>{header_html}<div class='history-container'>{list_items_html}</div></div>"
     st.markdown(full_html, unsafe_allow_html=True)
+
+
+def render_cumulative_chart(df):
+    """感情クラスタの累積割合グラフを描画する"""
+    st.subheader("感情クラスタの1日累積割合")
+    
+    if df.empty:
+        st.warning("表示するデータがありません。")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    clusters = [
+        '強いポジティブ', '弱いポジティブ', 'ポジティブ寄り中立',
+        'ネガティブ寄り中立', '弱いネガティブ', '強いネガティブ'
+    ]
+    colors = ['#ff9999', '#ffc000', '#ffff00', '#ccffcc', '#99ccff', '#c4a3d5']
+    
+    # データをプロット
+    x = df.index
+    # Y軸は各クラスタの割合を累積させたもの
+    y = [df[c] for c in clusters]
+    
+    ax.stackplot(x, y, labels=clusters, colors=colors, alpha=0.8)
+
+    # グラフの書式設定
+    ax.set_xlim(datetime.combine(x.min().date(), time.min), datetime.combine(x.min().date(), time.max))
+    ax.set_ylim(0, 100)
+    ax.set_ylabel('累積割合 (%)', fontsize=16)
+    ax.set_xlabel('時刻', fontsize=16)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=2))
+    plt.setp(ax.get_xticklabels(), fontsize=12, rotation=30, ha='right')
+    
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.tight_layout(rect=[0, 0, 0.85, 1]) # 凡例が収まるように調整
+    
+    st.pyplot(fig)

@@ -13,6 +13,7 @@ from ui_components import (
     render_valence_timeseries,
     render_emoji_map,
     render_input_history,
+    render_cumulative_chart
 )
 
 def main():
@@ -67,6 +68,7 @@ def main():
 
     # 選択された期間に応じてダッシュボードを一度だけ表示
     display_dashboard(days=period_options[selected_period])
+    render_cumulative_chart(fetch_emotion_data(db, st.session_state.current_date, days=7, user_id=user_id))
 
 
 if __name__ == "__main__":
