@@ -142,24 +142,28 @@ def process_for_cumulative_chart(df):
     return hourly_percentage
 
 def process_for_heatmap(df):
-    """ヒートマップ用にデータを処理する"""
+    """ヒートマップ用にポジティブとネガティブのデータをそれぞれ処理する"""
     if df.empty or 'lat' not in df.columns or 'lng' not in df.columns:
-        return []
+        return [], []
     
-    # 必要な列を抽出し、欠損値を除外
-    heatmap_df = df[['lat', 'lng', 'valence']].dropna()
+    heatmap_df = df[['lat', 'lng', 'valence']].dropna().copy()
     
-    # 緯度経度を数値型に変換
     heatmap_df['lat'] = pd.to_numeric(heatmap_df['lat'], errors='coerce')
     heatmap_df['lng'] = pd.to_numeric(heatmap_df['lng'], errors='coerce')
     heatmap_df.dropna(subset=['lat', 'lng'], inplace=True)
-
-    # 緯度経度が(0, 0)のデータを除外
     heatmap_df = heatmap_df[(heatmap_df['lat'] != 0) | (heatmap_df['lng'] != 0)]
 
     if heatmap_df.empty:
-        return []
+        return [], []
 
-    # [緯度, 経度, 重み（感情価）] のリストを作成
-    return heatmap_df[['lat', 'lng', 'valence']].values.tolist()
+    # ポジティブとネガティブにデータを分割
+    # 5.6を中立とポジティブの境界とする
+    positive_df = heatmap_df[heatmap_df['valence'] > 5.6]
+    negative_df = heatmap_df[heatmap_df['valence'] <= 5.6]
+
+    # [緯度, 経度] のリストを作成
+    positive_data = positive_df[['lat', 'lng']].values.tolist()
+    negative_data = negative_df[['lat', 'lng']].values.tolist()
+    
+    return positive_data, negative_data
 

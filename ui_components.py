@@ -122,7 +122,7 @@ def render_valence_timeseries(df, end_date, days: int):
     st.pyplot(fig)
 
 
-def render_emotion_map(df, heatmap_data, days: int):
+def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
     """感情の地図（絵文字アイコン or ヒートマップ）を表示する"""
     st.subheader("感情の地図")
 
@@ -137,8 +137,13 @@ def render_emotion_map(df, heatmap_data, days: int):
         st.info("この期間の位置情報付きの記録はありません。")
         return
 
-    # foliumを使用して地図を作成 (初期位置を固定座標に設定、タイルをグレースケールに変更)
-    m = folium.Map(location=[34.80914072819409, 135.5609309911741], zoom_start=12, tiles='CartoDB positron')
+    # foliumを使用して地図を作成 (タイルをCartoDB positronに戻す)
+    m = folium.Map(
+        location=[34.80914072819409, 135.5609309911741], 
+        zoom_start=12, 
+        tiles='CartoDB positron',
+        attr='CartoDB Positron'
+    )
 
     if map_type == "絵文字アイコン":
         # 絵文字プロットに必要な列を抽出
@@ -165,14 +170,31 @@ def render_emotion_map(df, heatmap_data, days: int):
                 folium.Marker(location=[row['lat'], row['lng']], icon=icon).add_to(m)
 
     elif map_type == "ヒートマップ":
-        if not heatmap_data:
+        if not positive_heatmap and not negative_heatmap:
             st.info("この期間の位置情報付きの記録はありません。")
             return
             
-        # ポジティブ（赤）とネガティブ（青）のグラデーションを作成
-        gradient = {0.2: 'blue', 0.4: 'lightblue', 0.6: 'lightgreen', 0.8: 'orange', 1.0: 'red'}
-        
-        HeatMap(heatmap_data, gradient=gradient, radius=25, blur=20).add_to(m)
+        # ネガティブ（青）のヒートマップを追加
+        if negative_heatmap:
+            HeatMap(
+                negative_heatmap,
+                name='Negative Emotions',
+                gradient={0.4: '#a9c5e8', 1: '#8b9dc3'}, # 落ち着いた青系に変更
+                radius=25,
+                blur=20,
+                opacity=0.7  # 不透明度を設定
+            ).add_to(m)
+
+        # ポジティブ（赤）のヒートマップを追加
+        if positive_heatmap:
+            HeatMap(
+                positive_heatmap,
+                name='Positive Emotions',
+                gradient={0.4: '#ffc8a2', 1: '#ff8c94'}, # 落ち着いた赤系に変更
+                radius=25,
+                blur=20,
+                opacity=0.7  # 不透明度を設定
+            ).add_to(m)
 
     # Streamlitに地図を表示（ユニークなキーを追加）
     st_folium(m, width=725, height=500, key=f"emotion_map_{days}")
@@ -208,10 +230,14 @@ def render_cluster_pie_chart(pie_data):
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    # クラスタと色の定義（累積グラフと一致させる）
+    # クラスタと色の定義（目に優しいパステル調に変更）
     colors_dict = {
-        '強いネガティブ': '#c4a3d5', '弱いネガティブ': '#99ccff', 'ネガティブ寄り中立': '#ccffcc',
-        'ポジティブ寄り中立': '#ffff00', '弱いポジティブ': '#ffc000', '強いポジティブ': '#ff9999'
+        '強いネガティブ': '#8b9dc3',   # 落ち着いた青
+        '弱いネガティブ': '#a9c5e8',   # やさしい青
+        'ネガティブ寄り中立': '#d3e0ea',   # ごく薄い青
+        'ポジティブ寄り中立': '#fff2a6',   # やさしい黄色
+        '弱いポジティブ': '#ffc8a2',   # ピーチ
+        '強いポジティブ': '#ff8c94'    # コーラル
     }
 
     # 表示するデータのラベル、サイズ、色を準備
@@ -258,7 +284,11 @@ def render_cumulative_chart(df):
         '強いネガティブ', '弱いネガティブ', 'ネガティブ寄り中立',
         'ポジティブ寄り中立', '弱いポジティブ', '強いポジティブ'
     ]
-    colors = ['#c4a3d5', '#99ccff', '#ccffcc', '#ffff00', '#ffc000', '#ff9999']
+    # 目に優しいパステル調の配色に変更
+    colors = [
+        '#8b9dc3', '#a9c5e8', '#d3e0ea', 
+        '#fff2a6', '#ffc8a2', '#ff8c94'
+    ]
     
     # データをプロット
     x = df.index
