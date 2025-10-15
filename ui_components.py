@@ -137,12 +137,12 @@ def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
         st.info("この期間の位置情報付きの記録はありません。")
         return
 
-    # foliumを使用して地図を作成 (タイルをStamen Toner Liteに変更)
+    # foliumを使用して地図を作成 (タイルをOpenStreetMapに変更)
     m = folium.Map(
         location=[34.80914072819409, 135.5609309911741], 
         zoom_start=12, 
-        tiles='Stamen Toner Lite',
-        attr='Stamen Toner Lite'
+        tiles='OpenStreetMap',
+        attr='Map data © OpenStreetMap contributors'
     )
 
     if map_type == "絵文字アイコン":
