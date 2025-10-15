@@ -6,6 +6,7 @@ import matplotlib.dates as mdates
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import os
 import folium
+from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 #import locale
 from datetime import timedelta, datetime, time
@@ -121,33 +122,37 @@ def render_valence_timeseries(df, end_date, days: int):
     st.pyplot(fig)
 
 
-def render_emoji_map(df, days: int):
-    """絵文字入力のlat,lngを地図上に表示する"""
-    st.subheader("絵文字入力の位置情報")
-    if 'lat' in df.columns and 'lng' in df.columns and not df[['lat', 'lng']].isnull().all().all():
+def render_emotion_map(df, heatmap_data, days: int):
+    """感情の地図（絵文字アイコン or ヒートマップ）を表示する"""
+    st.subheader("感情の地図")
+
+    map_type = st.radio(
+        "地図の表示タイプを選択",
+        ("絵文字アイコン", "ヒートマップ"),
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    if 'lat' not in df.columns or 'lng' not in df.columns or df[['lat', 'lng']].isnull().all().all():
+        st.info("この期間の位置情報付きの記録はありません。")
+        return
+
+    # foliumを使用して地図を作成 (初期位置を固定座標に設定、タイルをグレースケールに変更)
+    m = folium.Map(location=[34.80914072819409, 135.5609309911741], zoom_start=12, tiles='CartoDB positron')
+
+    if map_type == "絵文字アイコン":
         # 絵文字プロットに必要な列を抽出
         map_df = df.dropna(subset=['lat', 'lng'])[['lat', 'lng', 'name']].copy()
         
-        # latとlngを数値型に変換
         map_df['lat'] = pd.to_numeric(map_df['lat'], errors='coerce')
         map_df['lng'] = pd.to_numeric(map_df['lng'], errors='coerce')
         map_df.dropna(subset=['lat', 'lng'], inplace=True)
-
-        # 緯度経度が(0, 0)のデータを除外
         map_df = map_df[(map_df['lat'] != 0) | (map_df['lng'] != 0)]
 
         if map_df.empty:
-            st.markdown("<p style='font-size: 18px; color: #888;'>有効な位置情報がありません。</p>", unsafe_allow_html=True)
+            st.info("この期間の位置情報付きの記録はありません。")
             return
 
-        # 記録された位置情報の平均値を計算
-        # mean_lat = map_df['lat'].mean()
-        # mean_lng = map_df['lng'].mean()
-
-        # foliumを使用して地図を作成 (初期位置を固定座標に設定、タイルをグレースケールに変更)
-        m = folium.Map(location=[34.80914072819409, 135.5609309911741], zoom_start=15, tiles='CartoDB positron')
-
-        # データポイントを絵文字アイコンとして追加
         for _, row in map_df.iterrows():
             emoji_name = row.get('name')
             if not emoji_name:
@@ -156,20 +161,21 @@ def render_emoji_map(df, days: int):
             icon_path = os.path.join(EMOJI_IMAGE_FOLDER, f"{emoji_name}.png")
 
             if os.path.exists(icon_path):
-                icon = folium.features.CustomIcon(
-                    icon_path,
-                    icon_size=(30, 30) # アイコンサイズを調整
-                )
-                folium.Marker(
-                    location=[row['lat'], row['lng']],
-                    icon=icon
-                ).add_to(m)
+                icon = folium.features.CustomIcon(icon_path, icon_size=(30, 30))
+                folium.Marker(location=[row['lat'], row['lng']], icon=icon).add_to(m)
 
-        # Streamlitに地図を表示（ユニークなキーを追加）
-        st_folium(m, width=725, height=500, key=f"folium_map_{days}")
+    elif map_type == "ヒートマップ":
+        if not heatmap_data:
+            st.info("この期間の位置情報付きの記録はありません。")
+            return
+            
+        # ポジティブ（赤）とネガティブ（青）のグラデーションを作成
+        gradient = {0.2: 'blue', 0.4: 'lightblue', 0.6: 'lightgreen', 0.8: 'orange', 1.0: 'red'}
         
-    else:
-        st.markdown("<p style='font-size: 18px; color: #888;'>位置情報は記録されていません。</p>", unsafe_allow_html=True)
+        HeatMap(heatmap_data, gradient=gradient, radius=25, blur=20).add_to(m)
+
+    # Streamlitに地図を表示（ユニークなキーを追加）
+    st_folium(m, width=725, height=500, key=f"emotion_map_{days}")
 
 
 def render_input_history(df):
@@ -187,6 +193,55 @@ def render_input_history(df):
             list_items_html += f"<div class='history-item'><span>{row['絵文字']}</span><span class='history-time'>{row['記録']}</span></div>"
     full_html = f"<div class='history-wrapper'>{header_html}<div class='history-container'>{list_items_html}</div></div>"
     st.markdown(full_html, unsafe_allow_html=True)
+
+
+def render_cluster_pie_chart(pie_data):
+    """感情クラスタの割合を示す円グラフを描画する"""
+    st.subheader("感情クラスタの割合")
+
+    if pie_data.empty or pie_data.sum() == 0:
+        st.info("この期間の感情記録はありません。")
+        return
+
+    # 割合が0%のクラスタは表示しない
+    pie_data_to_show = pie_data[pie_data > 0]
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # クラスタと色の定義（累積グラフと一致させる）
+    colors_dict = {
+        '強いネガティブ': '#c4a3d5', '弱いネガティブ': '#99ccff', 'ネガティブ寄り中立': '#ccffcc',
+        'ポジティブ寄り中立': '#ffff00', '弱いポジティブ': '#ffc000', '強いポジティブ': '#ff9999'
+    }
+
+    # 表示するデータのラベル、サイズ、色を準備
+    labels = pie_data_to_show.index
+    sizes = pie_data_to_show.values
+    pie_colors = [colors_dict.get(label, '#cccccc') for label in labels]
+
+    # ドーナツグラフを描画
+    wedges, texts, autotexts = ax.pie(
+        sizes,
+        colors=pie_colors,
+        autopct='%1.1f%%',
+        startangle=90,
+        pctdistance=0.85,
+        wedgeprops=dict(width=0.4, edgecolor='w') # ドーナツの幅
+    )
+    
+    # テキストのスタイルを設定
+    plt.setp(texts, fontsize=12)
+    plt.setp(autotexts, fontsize=10, color="black")
+    ax.axis('equal')  # 円を真円に保つ
+    
+    # 凡例をグラフの右側に配置
+    ax.legend(wedges, labels,
+              title="感情クラスタ",
+              loc="center left",
+              bbox_to_anchor=(1, 0, 0.5, 1))
+
+    plt.tight_layout()
+    st.pyplot(fig)
 
 
 def render_cumulative_chart(df):

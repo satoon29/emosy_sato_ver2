@@ -6,16 +6,16 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 # 設定値をconfig.pyからインポート
-# from config import FIREBASE_CREDENTIALS_PATH
+from config import FIREBASE_CREDENTIALS_PATH
 
 @st.cache_resource
 def initialize_firebase():
     """Firebaseへの接続を初期化し、クライアントを返す"""
     if not firebase_admin._apps:
         try:
-            cred_dict = dict(st.secrets["firebase_credentials"])
-            cred = credentials.Certificate(cred_dict)
-            #cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            # cred_dict = dict(st.secrets["firebase_credentials"])
+            # cred = credentials.Certificate(cred_dict)
+            cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
             firebase_admin.initialize_app(cred)
         except Exception as e:
             st.error(f"Firebaseの初期化に失敗しました: {e}")
@@ -89,6 +89,30 @@ def assign_cluster(valence):
     else:
         return '強いポジティブ'
 
+def process_for_pie_chart(df):
+    """円グラフ用にクラスタの構成比率を計算する"""
+    if df.empty:
+        return pd.Series(dtype=float)
+
+    # 'cluster'列がなければ作成
+    if 'cluster' not in df.columns:
+        df['cluster'] = df['valence'].apply(assign_cluster)
+
+    # 各クラスタの出現回数を計算
+    cluster_counts = df['cluster'].value_counts()
+    
+    # 全体に対する割合（%）を計算
+    cluster_percentage = (cluster_counts / cluster_counts.sum()) * 100
+    
+    # 全てのクラスタがデータに含まれるように整形
+    clusters = [
+        '強いネガティブ', '弱いネガティブ', 'ネガティブ寄り中立',
+        'ポジティブ寄り中立', '弱いポジティブ', '強いポジティブ'
+    ]
+    cluster_percentage = cluster_percentage.reindex(clusters, fill_value=0)
+    
+    return cluster_percentage
+
 def process_for_cumulative_chart(df):
     """【修正】時間帯ごとのクラスタ構成比を計算する"""
     if df.empty:
@@ -116,4 +140,26 @@ def process_for_cumulative_chart(df):
     hourly_percentage = hourly_percentage.reindex(all_hours_index, fill_value=0)
     
     return hourly_percentage
+
+def process_for_heatmap(df):
+    """ヒートマップ用にデータを処理する"""
+    if df.empty or 'lat' not in df.columns or 'lng' not in df.columns:
+        return []
+    
+    # 必要な列を抽出し、欠損値を除外
+    heatmap_df = df[['lat', 'lng', 'valence']].dropna()
+    
+    # 緯度経度を数値型に変換
+    heatmap_df['lat'] = pd.to_numeric(heatmap_df['lat'], errors='coerce')
+    heatmap_df['lng'] = pd.to_numeric(heatmap_df['lng'], errors='coerce')
+    heatmap_df.dropna(subset=['lat', 'lng'], inplace=True)
+
+    # 緯度経度が(0, 0)のデータを除外
+    heatmap_df = heatmap_df[(heatmap_df['lat'] != 0) | (heatmap_df['lng'] != 0)]
+
+    if heatmap_df.empty:
+        return []
+
+    # [緯度, 経度, 重み（感情価）] のリストを作成
+    return heatmap_df[['lat', 'lng', 'valence']].values.tolist()
 

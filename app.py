@@ -10,15 +10,18 @@ from data_handler import (
     initialize_firebase, 
     fetch_emotion_data,
     fetch_all_emotion_data,
-    process_for_cumulative_chart
+    process_for_cumulative_chart,
+    process_for_pie_chart,
+    process_for_heatmap
 )
 from ui_components import (
     load_css,
     render_header,
     render_valence_timeseries,
-    render_emoji_map,
+    render_emotion_map,
     render_input_history,
     render_cumulative_chart,
+    render_cluster_pie_chart,
 )
 
 def main():
@@ -62,17 +65,21 @@ def main():
         # 全期間のデータを取得して処理
         all_data = fetch_all_emotion_data(db, user_id)
         cumulative_df = process_for_cumulative_chart(all_data)
+        pie_data = process_for_pie_chart(all_data)
+        heatmap_data = process_for_heatmap(all_data)
         
         # ヘッダーと累積グラフを描画
         # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
         st.markdown(f"<h1 class='main-title'>感情クラスタの時間帯別 構成比</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p class='subtitle'>全期間のデータを集計</p>", unsafe_allow_html=True)
+        st.markdown(f"<p class='subtitle'>ユーザー: {user_id} | 全期間のデータを集計</p>", unsafe_allow_html=True)
         st.divider()
         render_cumulative_chart(cumulative_df)
         
-        # 全期間の地図を表示
+        # 円グラフと地図を表示
         st.divider()
-        render_emoji_map(all_data, days=0) # days=0は累積分析用のユニークキーとして使用
+        render_cluster_pie_chart(pie_data)
+        st.divider()
+        render_emotion_map(all_data, heatmap_data, days=0) # days=0は累積分析用のユニークキーとして使用
 
 
 def display_dashboard(db, user_id, days: int):
@@ -85,12 +92,21 @@ def display_dashboard(db, user_id, days: int):
 
     if df.empty:
         st.markdown(f"<p style='font-size: 24px'>この期間の記録はありません。</p>", unsafe_allow_html=True)
+        # データがなくても円グラフのコンテナは表示
+        st.subheader("感情クラスタの割合")
+        st.info("この期間の感情記録はありません。")
         return
+
+    # 円グラフとヒートマップ用のデータを処理
+    pie_data = process_for_pie_chart(df)
+    heatmap_data = process_for_heatmap(df)
 
     # 各UIコンポーネントを描画
     render_valence_timeseries(df, st.session_state.current_date, days=days)
     st.divider()
-    render_emoji_map(df, days=days)
+    render_cluster_pie_chart(pie_data)
+    st.divider()
+    render_emotion_map(df, heatmap_data, days=days)
     st.divider()
     render_input_history(df)
 
