@@ -41,11 +41,18 @@ def main():
     if db is None:
         st.stop()
 
-    # URLのクエリパラメータからuser_idを取得
-    user_id = st.query_params.get("user_id", "test00")
-
-    # ▼▼▼【変更点】表示モードの選択を1つにまとめる ▼▼▼
+    # --- ▼▼▼【変更点】トークンによるユーザー認証 ▼▼▼ ---
+    token = st.query_params.get("t")
     
+    # トークンが存在しない、または無効な場合はエラーを表示して停止
+    if not token or token not in st.secrets.get("tokens", {}):
+        st.error("アクセス権がありません。正しいURLを指定してください。")
+        st.stop()
+        
+    # トークンからユーザーIDを取得
+    user_id = st.secrets["tokens"][token]
+    # --- ▲▲▲ 変更ここまで ▲▲▲ ---
+
     # ラジオボタンで表示モードを選択
     view_options = ["1日間", "3日間", "累積分析"]
     selected_view = st.radio(
@@ -71,7 +78,7 @@ def main():
         # ヘッダーと累積グラフを描画
         # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
         st.markdown(f"<h1 class='main-title'>感情クラスタの時間帯別 構成比</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p class='subtitle'>全期間のデータを集計</p>", unsafe_allow_html=True)
+        st.markdown(f"<p class='subtitle'>ユーザー: {user_id} | 全期間のデータを集計</p>", unsafe_allow_html=True)
         st.divider()
         render_cumulative_chart(cumulative_df)
         
