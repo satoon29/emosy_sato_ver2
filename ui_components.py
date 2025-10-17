@@ -162,7 +162,7 @@ def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
                 radius=50, blur=30, opacity=0.8
             ).add_to(m)
             # ポジティブな絵文字のみに絞り込み
-            map_df = map_df[map_df['valence'] > 5.6]
+            map_df = map_df[map_df['valence'] > 6.5]
         else:
             st.info("この期間にポジティブな感情の記録はありません。")
             map_df = pd.DataFrame() # 絵文字も表示しない
@@ -176,7 +176,7 @@ def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
                 radius=50, blur=30, opacity=0.8
             ).add_to(m)
             # ネガティブな絵文字のみに絞り込み
-            map_df = map_df[map_df['valence'] <= 5.6]
+            map_df = map_df[map_df['valence'] <= 4.5]
         else:
             st.info("この期間にネガティブな感情の記録はありません。")
             map_df = pd.DataFrame() # 絵文字も表示しない
