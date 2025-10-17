@@ -157,9 +157,8 @@ def process_for_heatmap(df):
         return [], []
 
     # ポジティブとネガティブにデータを分割
-    # 5.6を中立とポジティブの境界とする
-    positive_df = heatmap_df[heatmap_df['valence'] > 5.6]
-    negative_df = heatmap_df[heatmap_df['valence'] <= 5.6]
+    positive_df = heatmap_df[heatmap_df['valence'] > 6.5]
+    negative_df = heatmap_df[heatmap_df['valence'] <= 4.0]
 
     # [緯度, 経度] のリストを作成
     positive_data = positive_df[['lat', 'lng']].values.tolist()
