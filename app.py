@@ -75,8 +75,7 @@ def main():
         
         # ヘッダーと累積グラフを描画
         # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
-        st.markdown(f"<h1 class='main-title'>感情クラスタの時間帯別 構成比</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p class='subtitle'>ユーザー: {user_id} | 全期間のデータを集計</p>", unsafe_allow_html=True)
+        st.markdown(f"<h1 class='main-title'>ユーザ: {user_id} | 全期間のデータを集計</h1>", unsafe_allow_html=True)
         st.divider()
         render_cumulative_chart(cumulative_df)
         
