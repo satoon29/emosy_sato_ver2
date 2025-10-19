@@ -103,7 +103,7 @@ def render_valence_timeseries(df, end_date, days: int):
     ax.set_ylim(2, 9)
     ax.set_yticks([])
     ax.set_xlabel('時間', fontsize=20)
-    ax.set_ylabel('感情価 (ネガティブ ↔ ポジティブ)', fontsize=20)
+    ax.set_ylabel('ネガティブ ↔ ポジティブ', fontsize=20)
     
     # --- 表示期間に応じてX軸の目盛りとフォーマットを変更 ---
     if days == 1:
@@ -122,17 +122,9 @@ def render_valence_timeseries(df, end_date, days: int):
     st.pyplot(fig)
 
 
-def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
-    """感情の地図（絵文字アイコン or ヒートマップ）を表示する"""
+def render_emotion_map(df):
+    """感情の地図（ブラー付きの円と絵文字アイコン）を表示する"""
     st.subheader("感情の地図")
-
-    # 表示タイプを3択に変更
-    map_type = st.radio(
-        "地図の表示タイプを選択",
-        ("絵文字アイコン", "ポジティブ", "ネガティブ"),
-        horizontal=True,
-        label_visibility="collapsed"
-    )
 
     if 'lat' not in df.columns or 'lng' not in df.columns or df[['lat', 'lng']].isnull().all().all():
         st.info("この期間の位置情報付きの記録はありません。")
@@ -146,57 +138,66 @@ def render_emotion_map(df, positive_heatmap, negative_heatmap, days: int):
         attr='CartoDB Positron'
     )
 
-    # --- 選択に応じてヒートマップと絵文字を準備 ---
-    map_df = df.dropna(subset=['lat', 'lng']).copy()
+    # --- ▼▼▼【修正点】クラスタの強さに応じて不透明度を定義 ▼▼▼ ---
+    # ベースとなる色（RGB値）
+    positive_rgb = "255, 140, 148" # コーラル
+    negative_rgb = "139, 157, 195" # 落ち着いた青
+
+    # クラスタごとの不透明度を指定された値に変更
+    opacity_map = {
+        '強いネガティブ': 0.7,
+        '弱いネガティブ': 0.5,
+        'ネガティブ寄り中立': 0.3,
+        'ポジティブ寄り中立': 0.3,
+        '弱いポジティブ': 0.5,
+        '強いポジティブ': 0.7
+    }
+    
+    # 必要なデータを準備
+    map_df = df.dropna(subset=['lat', 'lng', 'cluster', 'name']).copy()
     map_df['lat'] = pd.to_numeric(map_df['lat'], errors='coerce')
     map_df['lng'] = pd.to_numeric(map_df['lng'], errors='coerce')
     map_df.dropna(subset=['lat', 'lng'], inplace=True)
     map_df = map_df[(map_df['lat'] != 0) | (map_df['lng'] != 0)]
 
-    if map_type == "ポジティブ":
-        if positive_heatmap:
-            HeatMap(
-                positive_heatmap,
-                name='Positive Emotions',
-                gradient={0.4: '#ffc8a2', 1: '#ff8c94'},
-                radius=50, blur=30, opacity=0.8
-            ).add_to(m)
-            # ポジティブな絵文字のみに絞り込み
-            map_df = map_df[map_df['valence'] > 6.5]
+    if map_df.empty:
+        st.info("この期間の位置情報付きの記録はありません。")
+        return
+
+    for _, row in map_df.iterrows():
+        cluster = row['cluster']
+        opacity = opacity_map.get(cluster, 0.1) # 不明なクラスタは薄く表示
+
+        # クラスタに応じてベース色を選択
+        if 'ポジティブ' in cluster:
+            base_rgb = positive_rgb
+        elif 'ネガティブ' in cluster:
+            base_rgb = negative_rgb
         else:
-            st.info("この期間にポジティブな感情の記録はありません。")
-            map_df = pd.DataFrame() # 絵文字も表示しない
+            base_rgb = "204, 204, 204" # 中立はグレー
+        
+        # --- ▼▼▼【修正点】HeatMapの正しい使い方に修正 ▼▼▼ ---
+        # 1. 各点にブラー付きの円（HeatMap）を描画
+        HeatMap(
+            # データに重み(opacity)を追加
+            [[row['lat'], row['lng'], opacity]],
+            # グラデーションは透明からベース色へ
+            gradient={1: f'rgb({base_rgb})'},
+            min_opacity=0.2,
+            # max_valは1.0に固定
+            max_val=1.0,
+            radius=50,
+            blur=30
+        ).add_to(m)
 
-    elif map_type == "ネガティブ":
-        if negative_heatmap:
-            HeatMap(
-                negative_heatmap,
-                name='Negative Emotions',
-                gradient={0.4: '#a9c5e8', 1: '#8b9dc3'},
-                radius=50, blur=30, opacity=0.8
-            ).add_to(m)
-            # ネガティブな絵文字のみに絞り込み
-            map_df = map_df[map_df['valence'] <= 4.5]
-        else:
-            st.info("この期間にネガティブな感情の記録はありません。")
-            map_df = pd.DataFrame() # 絵文字も表示しない
-
-    # --- 絵文字アイコンを描画 ---
-    if not map_df.empty:
-        for _, row in map_df.iterrows():
-            emoji_name = row.get('name')
-            if not emoji_name:
-                continue
-            
-            icon_path = os.path.join(EMOJI_IMAGE_FOLDER, f"{emoji_name}.png")
-
-            if os.path.exists(icon_path):
-                icon = folium.features.CustomIcon(icon_path, icon_size=(25, 25))
-                folium.Marker(location=[row['lat'], row['lng']], icon=icon).add_to(m)
+        # 2. 絵文字アイコンを上に重ねて描画
+        icon_path = os.path.join(EMOJI_IMAGE_FOLDER, f"{row['name']}.png")
+        if os.path.exists(icon_path):
+            icon = folium.features.CustomIcon(icon_path, icon_size=(25, 25))
+            folium.Marker(location=[row['lat'], row['lng']], icon=icon).add_to(m)
 
     # Streamlitに地図を表示
-    st_folium(m, width=725, height=500, key=f"emotion_map_{days}_{map_type}")
-
+    st_folium(m, width=725, height=500, key="emotion_map_2")
 
 def render_input_history(df):
     """入力履歴をヘッダー付きのスクロール可能なリストで表示する"""

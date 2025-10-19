@@ -12,13 +12,12 @@ from data_handler import (
     fetch_all_emotion_data,
     process_for_cumulative_chart,
     process_for_pie_chart,
-    process_for_heatmap
 )
 from ui_components import (
     load_css,
     render_header,
     render_valence_timeseries,
-    render_emotion_map,
+    render_emotion_map2,
     render_input_history,
     render_cumulative_chart,
     render_cluster_pie_chart,
@@ -73,7 +72,6 @@ def main():
         all_data = fetch_all_emotion_data(db, user_id)
         cumulative_df = process_for_cumulative_chart(all_data)
         pie_data = process_for_pie_chart(all_data)
-        positive_heatmap, negative_heatmap = process_for_heatmap(all_data)
         
         # ヘッダーと累積グラフを描画
         # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
@@ -82,11 +80,11 @@ def main():
         st.divider()
         render_cumulative_chart(cumulative_df)
         
-        # 円グラフと地図を表示
+        # 円グラフと新しい地図を表示
         st.divider()
         render_cluster_pie_chart(pie_data)
         st.divider()
-        render_emotion_map(all_data, positive_heatmap, negative_heatmap, days=0) # days=0は累積分析用のユニークキーとして使用
+        render_emotion_map2(all_data)
 
 
 def display_dashboard(db, user_id, days: int):
@@ -104,16 +102,15 @@ def display_dashboard(db, user_id, days: int):
         st.info("この期間の感情記録はありません。")
         return
 
-    # 円グラフとヒートマップ用のデータを処理
+    # 円グラフ用のデータを処理
     pie_data = process_for_pie_chart(df)
-    positive_heatmap, negative_heatmap = process_for_heatmap(df)
 
     # 各UIコンポーネントを描画
     render_valence_timeseries(df, st.session_state.current_date, days=days)
     st.divider()
     render_cluster_pie_chart(pie_data)
     st.divider()
-    render_emotion_map(df, positive_heatmap, negative_heatmap, days=days)
+    render_emotion_map2(df)
     st.divider()
     render_input_history(df)
 
