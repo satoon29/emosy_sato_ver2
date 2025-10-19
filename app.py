@@ -17,7 +17,7 @@ from ui_components import (
     load_css,
     render_header,
     render_valence_timeseries,
-    render_emotion_map2,
+    render_emotion_map,
     render_input_history,
     render_cumulative_chart,
     render_cluster_pie_chart,
@@ -84,7 +84,7 @@ def main():
         st.divider()
         render_cluster_pie_chart(pie_data)
         st.divider()
-        render_emotion_map2(all_data)
+        render_emotion_map(all_data)
 
 
 def display_dashboard(db, user_id, days: int):
@@ -110,7 +110,7 @@ def display_dashboard(db, user_id, days: int):
     st.divider()
     render_cluster_pie_chart(pie_data)
     st.divider()
-    render_emotion_map2(df)
+    render_emotion_map(df)
     st.divider()
     render_input_history(df)
 
