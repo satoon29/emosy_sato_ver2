@@ -186,7 +186,7 @@ def render_emotion_map(df):
             min_opacity=0.2,
             # max_valは1.0に固定
             max_val=1.0,
-            radius=50,
+            radius=40,
             blur=30
         ).add_to(m)
 
