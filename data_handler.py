@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -24,7 +25,7 @@ def initialize_firebase():
             return None
     return firestore.client()
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1800)
 # ▼▼▼【変更点】user_idを引数で受け取るように修正 ▼▼▼
 def fetch_emotion_data(_db_client, end_date, days: int, user_id: str):
     """指定された終了日から過去N日分のデータをFirestoreから取得する"""
@@ -49,7 +50,7 @@ def fetch_emotion_data(_db_client, end_date, days: int, user_id: str):
     df.sort_index(inplace=True)
     return df
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1800)
 def fetch_all_emotion_data(_db_client, user_id: str):
     """全期間の感情データをFirestoreから取得する"""
     if _db_client is None:

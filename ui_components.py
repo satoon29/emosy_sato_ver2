@@ -10,6 +10,7 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 #import locale
 from datetime import timedelta, datetime, time
+from data_handler import calculate_lagrange_interpolation
 
 
 # 設定値をconfig.pyからインポート
@@ -85,8 +86,17 @@ def render_valence_timeseries(df, end_date, days: int):
     ax.imshow(gradient, aspect='auto', cmap='coolwarm_r', alpha=0.3, 
               extent=(mdates.date2num(start_time), mdates.date2num(end_time), 2, 9))
 
-    # 折れ線グラフ
-    ax.plot(df.index, df['valence'], marker='o', linestyle='-', color='#F58E7D', label='感情価', zorder=10)
+    # --- ▼▼▼【変更点】ラグランジュ補間による曲線描画 ▼▼▼ ---
+    # 元のデータ点をマーカーとしてプロット
+    ax.plot(df.index, df['valence'], marker='o', linestyle='none', color='#F58E7D', zorder=10)
+
+    # ラグランジュ補間を計算
+    x_smooth, y_smooth = calculate_lagrange_interpolation(df)
+
+    # 補間された滑らかな曲線を描画
+    if x_smooth is not None and y_smooth is not None:
+        ax.plot(x_smooth, y_smooth, linestyle='-', color='#F58E7D', label='感情価', zorder=9)
+    # --- ▲▲▲ 変更ここまで ▲▲▲ ---
 
     # 絵文字プロット
     if os.path.isdir(EMOJI_IMAGE_FOLDER):
@@ -196,8 +206,8 @@ def render_emotion_map(df):
             icon = folium.features.CustomIcon(icon_path, icon_size=(25, 25))
             folium.Marker(location=[row['lat'], row['lng']], icon=icon).add_to(m)
 
-    # Streamlitに地図を表示
-    st_folium(m, width=725, height=500, key="emotion_map_2")
+    # Streamlitに地図を表示（returned_objectsを空リストにして再描画を抑制）
+    st_folium(m, width=725, height=500, key="emotion_map_2", returned_objects=[])
 
 def render_input_history(df):
     """入力履歴をヘッダー付きのスクロール可能なリストで表示する"""

@@ -11,7 +11,7 @@ from data_handler import (
     fetch_emotion_data,
     fetch_all_emotion_data,
     process_for_cumulative_chart,
-    process_for_pie_chart,
+    process_for_pie_chart
 )
 from ui_components import (
     load_css,
