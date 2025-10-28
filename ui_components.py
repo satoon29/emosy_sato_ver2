@@ -10,7 +10,6 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 #import locale
 from datetime import timedelta, datetime, time
-from data_handler import calculate_lagrange_interpolation
 
 
 # 設定値をconfig.pyからインポート
@@ -88,15 +87,8 @@ def render_valence_timeseries(df, end_date, days: int):
 
     # --- ▼▼▼【変更点】ラグランジュ補間による曲線描画 ▼▼▼ ---
     # 元のデータ点をマーカーとしてプロット
-    ax.plot(df.index, df['valence'], marker='o', linestyle='none', color='#F58E7D', zorder=10)
-
-    # ラグランジュ補間を計算
-    x_smooth, y_smooth = calculate_lagrange_interpolation(df)
-
-    # 補間された滑らかな曲線を描画
-    if x_smooth is not None and y_smooth is not None:
-        ax.plot(x_smooth, y_smooth, linestyle='-', color='#F58E7D', label='感情価', zorder=9)
-    # --- ▲▲▲ 変更ここまで ▲▲▲ ---
+    ax.plot(df.index, df['valence'], marker='o', linestyle='-', color='#F58E7D', zorder=10)
+    
 
     # 絵文字プロット
     if os.path.isdir(EMOJI_IMAGE_FOLDER):
