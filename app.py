@@ -1,7 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-from datetime import date
+from datetime import date, datetime
 import os
 
 # 各ファイルから必要なものをインポート
@@ -23,12 +23,33 @@ from ui_components import (
     render_cluster_pie_chart,
 )
 
+def log_access(db, user_id, token):
+    """アクセスログをFirestoreに記録"""
+    try:
+        access_log = {
+            'user_id': user_id,
+            'token': token,
+            'timestamp': datetime.now(),
+            'session_id': st.session_state.get('session_id', None)
+        }
+        
+        db.collection('access_logs').add(access_log)
+    except Exception as e:
+        # ログ記録の失敗はアプリの動作を妨げないようにする
+        print(f"アクセスログの記録に失敗: {e}")
+
+
 def main():
     """アプリケーションのメイン実行関数"""
     load_css("style.css")
 
     if 'current_date' not in st.session_state:
         st.session_state.current_date = date.today()
+    
+    # セッションIDを生成（初回アクセス時のみ）
+    if 'session_id' not in st.session_state:
+        import uuid
+        st.session_state.session_id = str(uuid.uuid4())
 
     if os.path.exists(JAPANESE_FONT_PATH):
         fm.fontManager.addfont(JAPANESE_FONT_PATH)
@@ -40,7 +61,7 @@ def main():
     if db is None:
         st.stop()
 
-    # --- ▼▼▼【変更点】トークンによるユーザー認証 ▼▼▼ ---
+    # --- トークンによるユーザー認証 ---
     token = st.query_params.get("t")
     
     # トークンが存在しない、または無効な場合はエラーを表示して停止
@@ -50,7 +71,9 @@ def main():
         
     # トークンからユーザーIDを取得
     user_id = st.secrets["tokens"][token]
-    # --- ▲▲▲ 変更ここまで ▲▲▲ ---
+    
+    # アクセスログを記録
+    log_access(db, user_id, token)
 
     # ラジオボタンで表示モードを選択
     view_options = ["1日間", "3日間", "累積分析"]
