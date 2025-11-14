@@ -23,14 +23,15 @@ from ui_components import (
     render_cluster_pie_chart,
 )
 
-def log_access(db, user_id, token):
+def log_access(db, user_id, token, view_mode=None):
     """アクセスログをFirestoreに記録"""
     try:
         access_log = {
             'user_id': user_id,
             'token': token,
             'timestamp': datetime.now(),
-            'session_id': st.session_state.get('session_id', None)
+            'session_id': st.session_state.get('session_id', None),
+            'view_mode': view_mode  # 【追加】表示モードを記録
         }
         
         db.collection('access_logs').add(access_log)
@@ -71,42 +72,26 @@ def main():
         
     # トークンからユーザーIDを取得
     user_id = st.secrets["tokens"][token]
-    
-    # アクセスログを記録
-    log_access(db, user_id, token)
 
     # ラジオボタンで表示モードを選択
-    view_options = ["1日間", "3日間", "累積分析"]
-    selected_view = st.radio(
-        "表示モードを選択",
-        options=view_options,
+    view_mode = st.radio(
+        "表示期間を選択:",
+        options=["日別分析", "3日分析", "累積分析"],
         horizontal=True,
         label_visibility="collapsed"
     )
-
-    if selected_view == "1日間":
-        display_dashboard(db, user_id, days=1)
     
-    elif selected_view == "3日間":
-        display_dashboard(db, user_id, days=3)
+    # 【追加】表示モードが変更されたらログを記録
+    if 'last_view_mode' not in st.session_state or st.session_state.last_view_mode != view_mode:
+        log_access(db, user_id, token, view_mode)
+        st.session_state.last_view_mode = view_mode
 
-    elif selected_view == "累積分析":
-        # 全期間のデータを取得して処理
-        all_data = fetch_all_emotion_data(db, user_id)
-        cumulative_df = process_for_cumulative_chart(all_data)
-        pie_data = process_for_pie_chart(all_data)
-        
-        # ヘッダーと累積グラフを描画
-        # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
-        st.markdown(f"<h1 class='main-title'>ユーザ: {user_id} | 全期間のデータを集計</h1>", unsafe_allow_html=True)
-        st.divider()
-        render_cumulative_chart(cumulative_df)
-        
-        # 円グラフと新しい地図を表示
-        st.divider()
-        render_cluster_pie_chart(pie_data)
-        st.divider()
-        render_emotion_map(all_data)
+    if view_mode == "日別分析":
+        show_daily_view(db, user_id, st.session_state.current_date)
+    elif view_mode == "3日分析":
+        show_three_day_view(db, user_id, st.session_state.current_date)
+    elif view_mode == "累積分析":
+        show_cumulative_view(db, user_id)
 
 
 def display_dashboard(db, user_id, days: int):

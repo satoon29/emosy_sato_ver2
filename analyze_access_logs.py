@@ -1,21 +1,8 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from collections import Counter
-import firebase_admin
-from firebase_admin import credentials, firestore
-from config import FIREBASE_CREDENTIALS_PATH
 
-
-def initialize_firebase_standalone():
-    """Firebase接続を初期化（Streamlit非依存）"""
-    if not firebase_admin._apps:
-        try:
-            cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-            firebase_admin.initialize_app(cred)
-        except Exception as e:
-            print(f"Firebaseの初期化に失敗しました: {e}")
-            return None
-    return firestore.client()
+from empathy import initialize_firebase_standalone
 
 
 def fetch_access_logs(db, start_date=None, end_date=None):
@@ -43,35 +30,37 @@ def fetch_access_logs(db, start_date=None, end_date=None):
     return df
 
 
-def analyze_user_access_counts(df):
+def analyze_user_access_counts(df, report_file):
     """ユーザーごとのアクセス回数を集計"""
     if df.empty:
-        print("アクセスログがありません")
+        message = "アクセスログがありません"
+        print(message)
+        report_file.write(message + "\n")
         return
     
     # ユーザーIDごとのアクセス回数
     user_counts = df['user_id'].value_counts().sort_values(ascending=False)
     
-    print("\n" + "="*60)
-    print("各ユーザーのアクセス回数")
-    print("="*60)
-    print(f"{'ユーザーID':15s} {'アクセス回数':>10s} {'割合':>10s}")
-    print("-"*60)
+    output = []
+    output.append("\n各ユーザーのアクセス回数")
+    output.append("-" * 40)
     
     total_access = len(df)
     for user_id, count in user_counts.items():
         percentage = count / total_access * 100
-        print(f"{user_id:15s} {count:10d}回 {percentage:9.1f}%")
+        output.append(f"{user_id}: {count}回 ({percentage:.1f}%)")
     
-    print("-"*60)
-    print(f"{'総アクセス数':15s} {total_access:10d}回")
-    print(f"{'ユニークユーザー数':15s} {len(user_counts):10d}人")
-    print("="*60)
+    output.append(f"\n合計: {total_access}回 (ユニークユーザー: {len(user_counts)}人)")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
     
     return user_counts
 
 
-def analyze_session_counts(df):
+def analyze_session_counts(df, report_file):
     """ユーザーごとのセッション数を集計"""
     if df.empty:
         return
@@ -79,21 +68,22 @@ def analyze_session_counts(df):
     # ユーザーIDとセッションIDでグループ化してセッション数をカウント
     session_counts = df.groupby('user_id')['session_id'].nunique().sort_values(ascending=False)
     
-    print("\n" + "="*60)
-    print("各ユーザーのセッション数（訪問回数）")
-    print("="*60)
-    print(f"{'ユーザーID':15s} {'セッション数':>12s}")
-    print("-"*60)
+    output = []
+    output.append("\n各ユーザーのセッション数（訪問回数）")
+    output.append("-" * 40)
     
     for user_id, count in session_counts.items():
-        print(f"{user_id:15s} {count:12d}回")
+        output.append(f"{user_id}: {count}回")
     
-    print("="*60)
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
     
     return session_counts
 
 
-def analyze_daily_access(df):
+def analyze_daily_access(df, report_file):
     """日別アクセス数を集計"""
     if df.empty:
         return
@@ -101,18 +91,96 @@ def analyze_daily_access(df):
     df['date'] = pd.to_datetime(df['timestamp']).dt.date
     daily_counts = df.groupby('date').size().sort_index()
     
-    print("\n" + "="*60)
-    print("日別アクセス数")
-    print("="*60)
-    print(f"{'日付':12s} {'アクセス回数':>12s}")
-    print("-"*60)
+    output = []
+    output.append("\n日別アクセス数")
+    output.append("-" * 40)
     
     for date, count in daily_counts.items():
-        print(f"{str(date):12s} {count:12d}回")
+        output.append(f"{date}: {count}回")
     
-    print("="*60)
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
     
     return daily_counts
+
+
+def analyze_view_mode_counts(df, report_file):
+    """表示モード別のアクセス回数を集計"""
+    if df.empty or 'view_mode' not in df.columns:
+        return
+    
+    # view_modeがNoneでないものだけをカウント
+    view_mode_df = df[df['view_mode'].notna()]
+    
+    if view_mode_df.empty:
+        return
+    
+    view_mode_counts = view_mode_df['view_mode'].value_counts().sort_index()
+    
+    output = []
+    output.append("\n表示モード別アクセス回数")
+    output.append("-" * 40)
+    
+    for mode, count in view_mode_counts.items():
+        percentage = count / len(view_mode_df) * 100
+        output.append(f"{mode}: {count}回 ({percentage:.1f}%)")
+    
+    output.append(f"\n合計: {len(view_mode_df)}回")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return view_mode_counts
+
+
+def analyze_user_view_modes(df, report_file):
+    """ユーザーごとの表示モード別アクセス回数を集計"""
+    if df.empty or 'view_mode' not in df.columns:
+        return
+    
+    # view_modeがNoneでないものだけを対象
+    view_mode_df = df[df['view_mode'].notna()]
+    
+    if view_mode_df.empty:
+        return
+    
+    # ユーザーIDと表示モードでピボットテーブルを作成
+    pivot = view_mode_df.pivot_table(
+        index='user_id',
+        columns='view_mode',
+        aggfunc='size',
+        fill_value=0
+    )
+    
+    output = []
+    output.append("\nユーザーごとの表示モード別アクセス回数")
+    output.append("-" * 60)
+    
+    # ヘッダー行
+    modes = pivot.columns.tolist()
+    header = f"{'ユーザーID':15s}"
+    for mode in modes:
+        header += f" {mode:12s}"
+    output.append(header)
+    output.append("-" * 60)
+    
+    # 各ユーザーの行
+    for user_id, row in pivot.iterrows():
+        line = f"{user_id:15s}"
+        for mode in modes:
+            line += f" {int(row[mode]):12d}回"
+        output.append(line)
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return pivot
 
 
 def save_analysis_to_csv(df):
@@ -141,29 +209,52 @@ def save_analysis_to_csv(df):
 
 def main():
     """メイン処理"""
-    db = initialize_firebase_standalone()
-    if db is None:
-        print("Firebase接続に失敗しました")
-        return
+    # レポートファイルを開く
+    report_file = open('log_report.txt', 'w', encoding='utf-8')
     
-    # 全期間のアクセスログを取得
-    print("アクセスログを取得中...")
-    df = fetch_access_logs(db)
-    
-    if df.empty:
-        print("アクセスログがありません")
-        return
-    
-    print(f"\n取得したログ件数: {len(df)}件")
-    print(f"期間: {df['timestamp'].min()} ～ {df['timestamp'].max()}")
-    
-    # 各種分析を実行
-    analyze_user_access_counts(df)
-    analyze_session_counts(df)
-    analyze_daily_access(df)
-    
-    # CSVに保存
-    save_analysis_to_csv(df)
+    try:
+        db = initialize_firebase_standalone()
+        if db is None:
+            message = "Firebase接続に失敗しました"
+            print(message)
+            report_file.write(message + "\n")
+            return
+        
+        # 全期間のアクセスログを取得
+        df = fetch_access_logs(db)
+        
+        if df.empty:
+            message = "アクセスログがありません"
+            print(message)
+            report_file.write(message + "\n")
+            return
+        
+        # 基本情報
+        header = f"アクセスログ分析レポート (総件数: {len(df)}件)"
+        period = f"期間: {df['timestamp'].min().strftime('%Y-%m-%d %H:%M')} ～ {df['timestamp'].max().strftime('%Y-%m-%d %H:%M')}"
+        
+        print(header)
+        print(period)
+        report_file.write(header + "\n")
+        report_file.write(period + "\n")
+        
+        # 各種分析を実行
+        analyze_user_access_counts(df, report_file)
+        analyze_session_counts(df, report_file)
+        analyze_view_mode_counts(df, report_file)  # 【追加】
+        analyze_user_view_modes(df, report_file)   # 【追加】
+        analyze_daily_access(df, report_file)
+        
+        # CSVに保存
+        save_analysis_to_csv(df)
+        
+        # レポート保存完了メッセージ
+        final_message = "\n分析完了: log_report.txt に保存しました"
+        print(final_message)
+        report_file.write(final_message + "\n")
+        
+    finally:
+        report_file.close()
 
 
 if __name__ == "__main__":
