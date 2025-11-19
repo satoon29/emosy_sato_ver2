@@ -102,19 +102,39 @@ def algorithm_most_frequent(day_df):
         return 'Neutral'
 
 
+# 定数定義
+VALENCE_MIN = 2.88
+VALENCE_MAX = 7.83
+
+
+def normalize_valence(valence):
+    """Valence値を[-1, 1]の範囲に線形正規化"""
+    v_norm = 2.0 * ((valence - VALENCE_MIN) / (VALENCE_MAX - VALENCE_MIN)) - 1.0
+    return v_norm
+
+
 def algorithm_peak_value(day_df):
     """ピーク値法: 正規化したValence値の絶対値が最大のものを採用"""
     if day_df.empty:
         return 'Neutral'
     
-    # Valence値を正規化 (中央値5.6を0とする)
-    normalized_valence = day_df['valence'] - 5.6
+    # Valence値を[-1, 1]の範囲に正規化
+    day_df = day_df.copy()
+    day_df['valence_normalized'] = day_df['valence'].apply(normalize_valence)
     
-    # 絶対値が最大のインデックスを取得
-    max_abs_idx = normalized_valence.abs().idxmax()
-    peak_valence = day_df.loc[max_abs_idx, 'valence']
+    # 正規化後の絶対値が最大のインデックスを取得
+    max_abs_idx = day_df['valence_normalized'].abs().idxmax()
+    peak_valence_normalized = day_df.loc[max_abs_idx, 'valence_normalized']
     
-    return classify_by_valence(peak_valence)
+    # ピーク値がニュートラル範囲内かチェック
+    if -0.176 <= peak_valence_normalized <= 0.140:
+        return 'Neutral'
+    
+    # ニュートラル範囲外の場合は正規化後の値の符号で判定
+    if peak_valence_normalized > 0:
+        return 'Positive'
+    else:
+        return 'Negative'
 
 
 def algorithm_latest_value(day_df):

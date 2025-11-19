@@ -13,6 +13,15 @@ from firebase_admin import credentials, firestore
 
 
 # ========================================
+# 定数定義
+# ========================================
+
+# Valenceの定義範囲
+VALENCE_MIN = 1.0  # 最小値
+VALENCE_MAX = 9.0  # 最大値
+
+
+# ========================================
 # Firebase接続
 # ========================================
 
@@ -59,6 +68,30 @@ def fetch_emotion_data(db, user_id):
 
 
 # ========================================
+# 正規化関数
+# ========================================
+
+def normalize_valence(valence):
+    """
+    Valence値を[-1, 1]の範囲に線形正規化
+    
+    v_norm = 2 * ((v - v_min) / (v_max - v_min)) - 1
+    
+    Parameters:
+    -----------
+    valence : float
+        元のValence値（1.0～9.0の範囲）
+    
+    Returns:
+    --------
+    float
+        正規化されたValence値（-1.0～1.0の範囲）
+    """
+    v_norm = 2.0 * ((valence - VALENCE_MIN) / (VALENCE_MAX - VALENCE_MIN)) - 1.0
+    return v_norm
+
+
+# ========================================
 # 感情分類
 # ========================================
 
@@ -93,14 +126,23 @@ def estimate_emotion_by_peak_value(day_df):
     if day_df.empty:
         return 'Neutral'
     
-    # Valence値を正規化 (中央値5.6を0とする)
-    normalized_valence = day_df['valence'] - 5.6
+    # Valence値を[-1, 1]の範囲に正規化
+    day_df = day_df.copy()
+    day_df['valence_normalized'] = day_df['valence'].apply(normalize_valence)
     
-    # 絶対値が最大のインデックスを取得
-    max_abs_idx = normalized_valence.abs().idxmax()
-    peak_valence = day_df.loc[max_abs_idx, 'valence']
+    # 正規化後の絶対値が最大のインデックスを取得
+    max_abs_idx = day_df['valence_normalized'].abs().idxmax()
+    peak_valence_normalized = day_df.loc[max_abs_idx, 'valence_normalized']
     
-    return classify_by_valence(peak_valence)
+    # ピーク値がニュートラル範囲内かチェック
+    if -0.02 <= peak_valence_normalized <= 0.175:
+        return 'Neutral'
+    
+    # ニュートラル範囲外の場合は正規化後の値の符号で判定
+    if peak_valence_normalized > 0:
+        return 'Positive'
+    else:
+        return 'Negative'
 
 
 # ========================================
@@ -188,7 +230,19 @@ def estimate_single_day(user_id, target_date):
         print(f"{target_date} のデータが見つかりません")
         return None
     
+    # 正規化値を追加（デバッグ用）
+    day_df_display = day_df.copy()
+    day_df_display['valence_normalized'] = day_df_display['valence'].apply(normalize_valence)
+    
     emotion = estimate_emotion_by_peak_value(day_df)
+    
+    # ピークとなったValence値を特定
+    max_abs_idx = day_df_display['valence_normalized'].abs().idxmax()
+    peak_valence_original = day_df_display.loc[max_abs_idx, 'valence']
+    peak_valence_normalized = day_df_display.loc[max_abs_idx, 'valence_normalized']
+    
+    # ニュートラル範囲判定
+    is_neutral_range = -0.02 <= peak_valence_normalized <= 0.175
     
     print(f"\n【ピーク値法による感情推定】")
     print(f"ユーザー: {user_id}")
@@ -196,6 +250,8 @@ def estimate_single_day(user_id, target_date):
     print(f"記録数: {len(day_df)}件")
     print(f"推定感情: {emotion}")
     print(f"Valence平均: {day_df['valence'].mean():.2f}")
+    print(f"ピーク値: {peak_valence_original:.2f} (正規化後: {peak_valence_normalized:.3f})")
+    print(f"ニュートラル範囲内: {'はい' if is_neutral_range else 'いいえ'}")
     
     return emotion
 
