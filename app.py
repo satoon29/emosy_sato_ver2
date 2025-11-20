@@ -1,7 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 
 # 各ファイルから必要なものをインポート
@@ -96,6 +96,10 @@ def main():
         cumulative_df = process_for_cumulative_chart(all_data)
         pie_data = process_for_pie_chart(all_data)
         
+        # 過去2週間のデータをフィルタリング（地図表示用）
+        two_weeks_ago = datetime.now() - timedelta(days=21)
+        recent_data = all_data[all_data['datetime'] >= two_weeks_ago].copy()
+        
         # ヘッダーと累積グラフを描画
         # 期間別表示と異なり、日付ナビゲーションは不要なため、一部のコンポーネントのみ表示
         st.markdown(f"<h1 class='main-title'>ユーザ: {user_id} | 全期間のデータを集計</h1>", unsafe_allow_html=True)
@@ -106,7 +110,7 @@ def main():
         st.divider()
         render_cluster_pie_chart(pie_data)
         st.divider()
-        render_emotion_map(all_data)
+        render_emotion_map(recent_data)
 
 
 def display_dashboard(db, user_id, days: int):

@@ -178,7 +178,7 @@ def render_emotion_map(df):
         else:
             base_rgb = "204, 204, 204" # 中立はグレー
         
-        # --- ▼▼▼【修正点】HeatMapの正しい使い方に修正 ▼▼▼ ---
+        # --- ▼▼▼【修正点】max_valパラメータを削除 ▼▼▼ ---
         # 1. 各点にブラー付きの円（HeatMap）を描画
         HeatMap(
             # データに重み(opacity)を追加
@@ -186,8 +186,6 @@ def render_emotion_map(df):
             # グラデーションは透明からベース色へ
             gradient={1: f'rgb({base_rgb})'},
             min_opacity=0.2,
-            # max_valは1.0に固定
-            max_val=1.0,
             radius=40,
             blur=30
         ).add_to(m)
