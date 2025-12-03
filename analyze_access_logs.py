@@ -208,12 +208,45 @@ def analyze_user_view_modes(df, report_file):
     return pivot
 
 
+def estimate_missing_durations(df):
+    """終了時刻が記録されていないページビューの滞在時間を推定"""
+    if df.empty:
+        return df
+    
+    df = df.copy()
+    df = df.sort_values(['user_id', 'session_id', 'start_time'])
+    
+    # 終了時刻がないレコードに対して推定値を設定
+    for idx, row in df.iterrows():
+        if pd.isna(row['end_time']) or pd.isna(row['duration_seconds']):
+            # 同じセッション内の次のページビューがあれば、その開始時刻を終了時刻とする
+            next_view = df[
+                (df['user_id'] == row['user_id']) & 
+                (df['session_id'] == row['session_id']) &
+                (df['start_time'] > row['start_time'])
+            ].sort_values('start_time').head(1)
+            
+            if not next_view.empty:
+                estimated_end = next_view.iloc[0]['start_time']
+            else:
+                # 次のページビューがない場合は、デフォルト値（例：5分）を使用
+                estimated_end = row['start_time'] + timedelta(minutes=5)
+            
+            df.at[idx, 'end_time'] = estimated_end
+            df.at[idx, 'duration_seconds'] = (estimated_end - row['start_time']).total_seconds()
+            df.at[idx, 'is_estimated'] = True
+        else:
+            df.at[idx, 'is_estimated'] = False
+    
+    return df
+
+
 def analyze_viewing_duration(df, report_file):
     """ユーザーごとの閲覧時間を集計"""
     if df.empty:
         return
     
-    # duration_secondsがNoneでないものだけを対象
+    # duration_secondsがNoneでないもの（実際に記録されたもの）だけを対象
     duration_df = df[df['duration_seconds'].notna()].copy()
     
     if duration_df.empty:
@@ -229,7 +262,7 @@ def analyze_viewing_duration(df, report_file):
     user_duration = user_duration.sort_values('total_seconds', ascending=False)
     
     output = []
-    output.append("\nユーザーごとの閲覧時間")
+    output.append("\nユーザーごとの閲覧時間（実測値のみ）")
     output.append("-" * 60)
     output.append(f"{'ユーザーID':15s} {'総閲覧時間':15s} {'平均閲覧時間':15s} {'閲覧回数':10s}")
     output.append("-" * 60)

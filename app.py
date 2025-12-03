@@ -133,6 +133,9 @@ def main():
     # ページビューを記録・更新
     log_page_view(db, user_id, selected_view)
     update_page_view_duration(db, user_id, selected_view)
+    
+    # JavaScriptを使用してページ離脱時に終了時刻を記録
+    inject_beforeunload_script(user_id, selected_view)
 
     if selected_view == "1日間":
         display_dashboard(db, user_id, days=1)
@@ -189,6 +192,27 @@ def display_dashboard(db, user_id, days: int):
     render_emotion_map(df)
     st.divider()
     render_input_history(df)
+
+
+def inject_beforeunload_script(user_id, view_mode):
+    """ページ離脱時に終了時刻を記録するJavaScriptを挿入"""
+    script = f"""
+    <script>
+    window.addEventListener('beforeunload', function (e) {{
+        // ページ離脱時にサーバーに通知を送る
+        const data = {{
+            user_id: '{user_id}',
+            view_mode: '{view_mode}',
+            session_id: '{st.session_state.get("session_id", "")}',
+            doc_id: '{st.session_state.get("page_view_doc_id", "")}'
+        }};
+        
+        // sendBeacon APIを使用（非同期で確実に送信）
+        navigator.sendBeacon('/close_page', JSON.stringify(data));
+    }});
+    </script>
+    """
+    st.components.v1.html(script, height=0)
 
 
 if __name__ == "__main__":
