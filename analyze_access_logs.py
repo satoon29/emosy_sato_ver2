@@ -30,23 +30,47 @@ def fetch_access_logs(db, start_date=None, end_date=None):
     return df
 
 
-def fetch_page_views(db, start_date=None, end_date=None):
+def fetch_page_views(db, user_id=None, start_date=None, end_date=None):
     """ページビューログをFirestoreから取得"""
-    query = db.collection('page_views')
-    
-    # 期間指定がある場合はフィルタ
-    if start_date:
-        query = query.where('start_time', '>=', start_date)
-    if end_date:
-        query = query.where('start_time', '<=', end_date)
-    
-    docs = query.stream()
-    
     records = []
-    for doc in docs:
-        record = doc.to_dict()
-        record['doc_id'] = doc.id
-        records.append(record)
+    
+    if user_id:
+        # 特定のユーザーのページビューを取得
+        query = db.collection('users').document(user_id).collection('page_views')
+        
+        if start_date:
+            query = query.where('start_time', '>=', start_date)
+        if end_date:
+            query = query.where('start_time', '<=', end_date)
+        
+        docs = query.stream()
+        
+        for doc in docs:
+            record = doc.to_dict()
+            record['doc_id'] = doc.id
+            record['user_id'] = user_id
+            records.append(record)
+    else:
+        # 全ユーザーのページビューを取得
+        users_ref = db.collection('users')
+        users = users_ref.stream()
+        
+        for user_doc in users:
+            user_id = user_doc.id
+            query = db.collection('users').document(user_id).collection('page_views')
+            
+            if start_date:
+                query = query.where('start_time', '>=', start_date)
+            if end_date:
+                query = query.where('start_time', '<=', end_date)
+            
+            docs = query.stream()
+            
+            for doc in docs:
+                record = doc.to_dict()
+                record['doc_id'] = doc.id
+                record['user_id'] = user_id
+                records.append(record)
     
     if not records:
         return pd.DataFrame()

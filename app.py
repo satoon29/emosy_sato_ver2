@@ -48,7 +48,6 @@ def log_page_view(db, user_id, view_mode):
             st.session_state.current_view_mode = view_mode
             
             page_view_log = {
-                'user_id': user_id,
                 'session_id': st.session_state.get('session_id', None),
                 'view_mode': view_mode,
                 'start_time': st.session_state.page_view_start,
@@ -56,8 +55,8 @@ def log_page_view(db, user_id, view_mode):
                 'duration_seconds': None
             }
             
-            # ドキュメントIDを保存して後で更新できるようにする
-            doc_ref = db.collection('page_views').add(page_view_log)
+            # ユーザーのサブコレクションとして保存
+            doc_ref = db.collection('users').document(user_id).collection('page_views').add(page_view_log)
             st.session_state.page_view_doc_id = doc_ref[1].id
     except Exception as e:
         print(f"ページビュー記録に失敗: {e}")
@@ -72,7 +71,7 @@ def update_page_view_duration(db, user_id, view_mode):
             duration = (end_time - st.session_state.page_view_start).total_seconds()
             
             if 'page_view_doc_id' in st.session_state:
-                db.collection('page_views').document(st.session_state.page_view_doc_id).update({
+                db.collection('users').document(user_id).collection('page_views').document(st.session_state.page_view_doc_id).update({
                     'end_time': end_time,
                     'duration_seconds': duration
                 })
@@ -133,9 +132,6 @@ def main():
     # ページビューを記録・更新
     log_page_view(db, user_id, selected_view)
     update_page_view_duration(db, user_id, selected_view)
-    
-    # JavaScriptを使用してページ離脱時に終了時刻を記録
-    inject_beforeunload_script(user_id, selected_view)
 
     if selected_view == "1日間":
         display_dashboard(db, user_id, days=1)
@@ -192,27 +188,6 @@ def display_dashboard(db, user_id, days: int):
     render_emotion_map(df)
     st.divider()
     render_input_history(df)
-
-
-def inject_beforeunload_script(user_id, view_mode):
-    """ページ離脱時に終了時刻を記録するJavaScriptを挿入"""
-    script = f"""
-    <script>
-    window.addEventListener('beforeunload', function (e) {{
-        // ページ離脱時にサーバーに通知を送る
-        const data = {{
-            user_id: '{user_id}',
-            view_mode: '{view_mode}',
-            session_id: '{st.session_state.get("session_id", "")}',
-            doc_id: '{st.session_state.get("page_view_doc_id", "")}'
-        }};
-        
-        // sendBeacon APIを使用（非同期で確実に送信）
-        navigator.sendBeacon('/close_page', JSON.stringify(data));
-    }});
-    </script>
-    """
-    st.components.v1.html(script, height=0)
 
 
 if __name__ == "__main__":
