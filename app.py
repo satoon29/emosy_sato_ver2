@@ -30,13 +30,59 @@ def log_access(db, user_id, token):
             'user_id': user_id,
             'token': token,
             'timestamp': datetime.now(),
-            'session_id': st.session_state.get('session_id', None)
+            'session_id': st.session_state.get('session_id', None),
+            'view_mode': st.session_state.get('current_view_mode', None)
         }
         
         db.collection('access_logs').add(access_log)
     except Exception as e:
         # ログ記録の失敗はアプリの動作を妨げないようにする
         print(f"アクセスログの記録に失敗: {e}")
+
+
+def log_page_view(db, user_id, view_mode):
+    """ページビュー開始時刻を記録"""
+    try:
+        if 'page_view_start' not in st.session_state:
+            st.session_state.page_view_start = datetime.now()
+            st.session_state.current_view_mode = view_mode
+            
+            page_view_log = {
+                'user_id': user_id,
+                'session_id': st.session_state.get('session_id', None),
+                'view_mode': view_mode,
+                'start_time': st.session_state.page_view_start,
+                'end_time': None,
+                'duration_seconds': None
+            }
+            
+            # ドキュメントIDを保存して後で更新できるようにする
+            doc_ref = db.collection('page_views').add(page_view_log)
+            st.session_state.page_view_doc_id = doc_ref[1].id
+    except Exception as e:
+        print(f"ページビュー記録に失敗: {e}")
+
+
+def update_page_view_duration(db, user_id, view_mode):
+    """ページビューの終了時刻と滞在時間を更新"""
+    try:
+        # 表示モードが変更された場合、前のページビューを終了
+        if 'page_view_start' in st.session_state and st.session_state.get('current_view_mode') != view_mode:
+            end_time = datetime.now()
+            duration = (end_time - st.session_state.page_view_start).total_seconds()
+            
+            if 'page_view_doc_id' in st.session_state:
+                db.collection('page_views').document(st.session_state.page_view_doc_id).update({
+                    'end_time': end_time,
+                    'duration_seconds': duration
+                })
+            
+            # 新しいページビューを開始
+            del st.session_state.page_view_start
+            del st.session_state.page_view_doc_id
+            log_page_view(db, user_id, view_mode)
+    except Exception as e:
+        print(f"ページビュー更新に失敗: {e}")
 
 
 def main():
@@ -83,6 +129,10 @@ def main():
         horizontal=True,
         label_visibility="collapsed"
     )
+
+    # ページビューを記録・更新
+    log_page_view(db, user_id, selected_view)
+    update_page_view_duration(db, user_id, selected_view)
 
     if selected_view == "1日間":
         display_dashboard(db, user_id, days=1)

@@ -1,8 +1,8 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from collections import Counter
-
-from empathy import initialize_firebase_standalone
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 
 def fetch_access_logs(db, start_date=None, end_date=None):
@@ -14,6 +14,31 @@ def fetch_access_logs(db, start_date=None, end_date=None):
         query = query.where('timestamp', '>=', start_date)
     if end_date:
         query = query.where('timestamp', '<=', end_date)
+    
+    docs = query.stream()
+    
+    records = []
+    for doc in docs:
+        record = doc.to_dict()
+        record['doc_id'] = doc.id
+        records.append(record)
+    
+    if not records:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame(records)
+    return df
+
+
+def fetch_page_views(db, start_date=None, end_date=None):
+    """ページビューログをFirestoreから取得"""
+    query = db.collection('page_views')
+    
+    # 期間指定がある場合はフィルタ
+    if start_date:
+        query = query.where('start_time', '>=', start_date)
+    if end_date:
+        query = query.where('start_time', '<=', end_date)
     
     docs = query.stream()
     
@@ -183,6 +208,128 @@ def analyze_user_view_modes(df, report_file):
     return pivot
 
 
+def analyze_viewing_duration(df, report_file):
+    """ユーザーごとの閲覧時間を集計"""
+    if df.empty:
+        return
+    
+    # duration_secondsがNoneでないものだけを対象
+    duration_df = df[df['duration_seconds'].notna()].copy()
+    
+    if duration_df.empty:
+        output = ["\n閲覧時間のデータがありません"]
+        for line in output:
+            print(line)
+            report_file.write(line + "\n")
+        return
+    
+    # ユーザーごとの総閲覧時間を計算
+    user_duration = duration_df.groupby('user_id')['duration_seconds'].agg(['sum', 'mean', 'count'])
+    user_duration.columns = ['total_seconds', 'avg_seconds', 'view_count']
+    user_duration = user_duration.sort_values('total_seconds', ascending=False)
+    
+    output = []
+    output.append("\nユーザーごとの閲覧時間")
+    output.append("-" * 60)
+    output.append(f"{'ユーザーID':15s} {'総閲覧時間':15s} {'平均閲覧時間':15s} {'閲覧回数':10s}")
+    output.append("-" * 60)
+    
+    for user_id, row in user_duration.iterrows():
+        total_time = str(timedelta(seconds=int(row['total_seconds'])))
+        avg_time = str(timedelta(seconds=int(row['avg_seconds'])))
+        output.append(f"{user_id:15s} {total_time:15s} {avg_time:15s} {int(row['view_count']):10d}回")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return user_duration
+
+
+def analyze_view_mode_duration(df, report_file):
+    """表示モード別の閲覧時間を集計"""
+    if df.empty or 'view_mode' not in df.columns:
+        return
+    
+    # duration_secondsとview_modeがNoneでないものだけを対象
+    duration_df = df[(df['duration_seconds'].notna()) & (df['view_mode'].notna())].copy()
+    
+    if duration_df.empty:
+        return
+    
+    # 表示モード別の閲覧時間を集計
+    mode_duration = duration_df.groupby('view_mode')['duration_seconds'].agg(['sum', 'mean', 'count'])
+    mode_duration.columns = ['total_seconds', 'avg_seconds', 'view_count']
+    mode_duration = mode_duration.sort_values('total_seconds', ascending=False)
+    
+    output = []
+    output.append("\n表示モード別の閲覧時間")
+    output.append("-" * 60)
+    output.append(f"{'表示モード':15s} {'総閲覧時間':15s} {'平均閲覧時間':15s} {'閲覧回数':10s}")
+    output.append("-" * 60)
+    
+    for mode, row in mode_duration.iterrows():
+        total_time = str(timedelta(seconds=int(row['total_seconds'])))
+        avg_time = str(timedelta(seconds=int(row['avg_seconds'])))
+        output.append(f"{mode:15s} {total_time:15s} {avg_time:15s} {int(row['view_count']):10d}回")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return mode_duration
+
+
+def analyze_user_mode_duration(df, report_file):
+    """ユーザーと表示モード別の閲覧時間を集計"""
+    if df.empty or 'view_mode' not in df.columns:
+        return
+    
+    # duration_secondsとview_modeがNoneでないものだけを対象
+    duration_df = df[(df['duration_seconds'].notna()) & (df['view_mode'].notna())].copy()
+    
+    if duration_df.empty:
+        return
+    
+    # ユーザーIDと表示モードでピボットテーブルを作成
+    pivot = duration_df.pivot_table(
+        index='user_id',
+        columns='view_mode',
+        values='duration_seconds',
+        aggfunc='sum',
+        fill_value=0
+    )
+    
+    output = []
+    output.append("\nユーザーと表示モード別の閲覧時間（秒）")
+    output.append("-" * 80)
+    
+    # ヘッダー行
+    modes = pivot.columns.tolist()
+    header = f"{'ユーザーID':15s}"
+    for mode in modes:
+        header += f" {mode:20s}"
+    output.append(header)
+    output.append("-" * 80)
+    
+    # 各ユーザーの行
+    for user_id, row in pivot.iterrows():
+        line = f"{user_id:15s}"
+        for mode in modes:
+            duration = str(timedelta(seconds=int(row[mode])))
+            line += f" {duration:20s}"
+        output.append(line)
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return pivot
+
+
 def save_analysis_to_csv(df):
     """分析結果をCSVに保存"""
     if df.empty:
@@ -213,7 +360,22 @@ def main():
     report_file = open('log_report.txt', 'w', encoding='utf-8')
     
     try:
-        db = initialize_firebase_standalone()
+        # Firebase初期化
+        if not firebase_admin._apps:
+            # 環境に応じて適切な認証方法を選択
+            try:
+                # Streamlit Cloud環境の場合
+                import streamlit as st
+                cred_dict = dict(st.secrets["firebase_credentials"])
+                cred = credentials.Certificate(cred_dict)
+            except:
+                # ローカル環境の場合
+                from config import FIREBASE_CREDENTIALS_PATH
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            
+            firebase_admin.initialize_app(cred)
+        
+        db = firestore.client()
         if db is None:
             message = "Firebase接続に失敗しました"
             print(message)
@@ -229,6 +391,9 @@ def main():
             report_file.write(message + "\n")
             return
         
+        # ページビューログを取得
+        page_views_df = fetch_page_views(db)
+        
         # 基本情報
         header = f"アクセスログ分析レポート (総件数: {len(df)}件)"
         period = f"期間: {df['timestamp'].min().strftime('%Y-%m-%d %H:%M')} ～ {df['timestamp'].max().strftime('%Y-%m-%d %H:%M')}"
@@ -241,9 +406,15 @@ def main():
         # 各種分析を実行
         analyze_user_access_counts(df, report_file)
         analyze_session_counts(df, report_file)
-        analyze_view_mode_counts(df, report_file)  # 【追加】
-        analyze_user_view_modes(df, report_file)   # 【追加】
+        analyze_view_mode_counts(df, report_file)
+        analyze_user_view_modes(df, report_file)
         analyze_daily_access(df, report_file)
+        
+        # 閲覧時間の分析を追加
+        if not page_views_df.empty:
+            analyze_viewing_duration(page_views_df, report_file)
+            analyze_view_mode_duration(page_views_df, report_file)
+            analyze_user_mode_duration(page_views_df, report_file)
         
         # CSVに保存
         save_analysis_to_csv(df)
