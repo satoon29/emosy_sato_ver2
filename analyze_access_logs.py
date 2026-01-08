@@ -1,8 +1,30 @@
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import Counter
 import firebase_admin
 from firebase_admin import credentials, firestore
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import os
+
+# 日本語フォントを設定
+JAPANESE_FONT_PATH = "assets/NotoSansJP-Regular.ttf"
+if os.path.exists(JAPANESE_FONT_PATH):
+    fm.fontManager.addfont(JAPANESE_FONT_PATH)
+    plt.rcParams['font.family'] = 'Noto Sans JP'
+else:
+    print(f"⚠️ 日本語フォントが見つかりません: {JAPANESE_FONT_PATH}")
+
+# 実験期間の定義
+EXPERIMENT_PERIODS = {
+    'user21': {'start': date(2024, 12, 4), 'end': date(2024, 12, 24)},
+    'user22': {'start': date(2024, 12, 5), 'end': date(2024, 12, 25)},
+    'user23': {'start': date(2024, 12, 6), 'end': date(2024, 12, 26)},
+    'User24': {'start': date(2024, 12, 6), 'end': date(2024, 12, 26)},
+    'user25': {'start': date(2024, 12, 6), 'end': date(2024, 12, 26)},
+}
+
+NOTIFICATIONS_PER_DAY = 20
 
 
 def fetch_access_logs(db, start_date=None, end_date=None):
@@ -411,6 +433,340 @@ def save_analysis_to_csv(df):
     print("詳細ログを access_log_details.csv に保存しました")
 
 
+def plot_user_access_counts(df, report_file, target_users=None):
+    """ユーザーごとのアクセス回数を棒グラフで可視化"""
+    if df.empty:
+        return
+    
+    # ユーザーIDごとのアクセス回数を集計
+    user_counts = df['user_id'].value_counts().sort_index()
+    
+    # 特定のユーザーのみを対象にする場合
+    if target_users:
+        user_counts = user_counts[user_counts.index.isin(target_users)]
+        if user_counts.empty:
+            output = [f"\n指定されたユーザー {target_users} のデータがありません"]
+            for line in output:
+                print(line)
+                report_file.write(line + "\n")
+            return
+    
+    # グラフを作成
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # 棒グラフを描画
+    bars = ax.bar(range(len(user_counts)), user_counts.values, color='#4A90E2', alpha=0.8)
+    
+    # X軸のラベルを設定
+    ax.set_xticks(range(len(user_counts)))
+    ax.set_xticklabels(user_counts.index, rotation=45, ha='right')
+    
+    # 各バーの上に数値を表示
+    for i, (user, count) in enumerate(user_counts.items()):
+        ax.text(i, count, str(count), ha='center', va='bottom', fontsize=10)
+    
+    # グラフの装飾
+    ax.set_xlabel('ユーザーID', fontsize=12)
+    ax.set_ylabel('アクセス回数', fontsize=12)
+    ax.set_title('ユーザーごとのアクセス回数', fontsize=14, fontweight='bold')
+    ax.grid(axis='y', linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    
+    # グラフを保存
+    plt.savefig('user_access_counts.png', dpi=300, bbox_inches='tight')
+    print("\nグラフを user_access_counts.png に保存しました")
+    report_file.write("\nグラフを user_access_counts.png に保存しました\n")
+    
+    plt.close()
+    
+    return user_counts
+
+
+def plot_daily_access_by_user(df, report_file, target_users=None):
+    """ユーザーごとの日別アクセス数を折れ線グラフで可視化"""
+    if df.empty:
+        return
+    
+    df_copy = df.copy()
+    df_copy['date'] = pd.to_datetime(df_copy['timestamp']).dt.date
+    
+    # 特定のユーザーのみを対象にする場合
+    if target_users:
+        df_copy = df_copy[df_copy['user_id'].isin(target_users)]
+        if df_copy.empty:
+            output = [f"\n指定されたユーザー {target_users} のデータがありません"]
+            for line in output:
+                print(line)
+                report_file.write(line + "\n")
+            return
+    
+    # ユーザーIDと日付でピボットテーブルを作成
+    pivot = df_copy.pivot_table(
+        index='date',
+        columns='user_id',
+        aggfunc='size',
+        fill_value=0
+    )
+    
+    # グラフを作成
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # 各ユーザーの折れ線グラフを描画
+    colors = ['#4A90E2', '#E24A4A', '#4AE290', '#E2904A', '#904AE2']
+    for i, user_id in enumerate(pivot.columns):
+        ax.plot(pivot.index, pivot[user_id], marker='o', 
+                label=user_id, linewidth=2, color=colors[i % len(colors)])
+    
+    # グラフの装飾
+    ax.set_xlabel('日付', fontsize=12)
+    ax.set_ylabel('アクセス回数', fontsize=12)
+    ax.set_title('ユーザーごとの日別アクセス推移', fontsize=14, fontweight='bold')
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    # X軸の日付表示を調整
+    plt.xticks(rotation=45, ha='right')
+    
+    plt.tight_layout()
+    
+    # グラフを保存
+    plt.savefig('daily_access_by_user.png', dpi=300, bbox_inches='tight')
+    print("グラフを daily_access_by_user.png に保存しました")
+    report_file.write("グラフを daily_access_by_user.png に保存しました\n")
+    
+    plt.close()
+    
+    return pivot
+
+
+def fetch_emotion_records(db, user_id):
+    """特定ユーザーの感情記録をFirestoreから取得"""
+    try:
+        query = db.collection('users').document(user_id).collection('emotions')
+        docs = query.stream()
+        
+        records = []
+        for doc in docs:
+            record = doc.to_dict()
+            record['doc_id'] = doc.id
+            
+            # dayフィールドが存在することを確認
+            if 'day' not in record:
+                continue
+            
+            records.append(record)
+        
+        if not records:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(records)
+        
+        # dayフィールドからdatetimeを作成
+        # day: "2025/12/06", time: "10:30" の形式を想定
+        if 'time' in df.columns:
+            df['datetime'] = pd.to_datetime(df['day'] + ' ' + df['time'], format='%Y/%m/%d %H:%M', errors='coerce')
+        else:
+            # timeフィールドがない場合はdayのみで日付を作成
+            df['datetime'] = pd.to_datetime(df['day'], format='%Y/%m/%d', errors='coerce')
+        
+        df.dropna(subset=['datetime'], inplace=True)
+        
+        return df
+    except Exception as e:
+        print(f"感情記録の取得に失敗 ({user_id}): {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
+
+
+def calculate_response_rate_by_user(db, report_file):
+    """ユーザーごとの感情入力率を計算"""
+    output = []
+    output.append("\n実験期間における感情入力率")
+    output.append("-" * 80)
+    output.append(f"{'ユーザーID':10s} {'実験期間':25s} {'日数':5s} {'総通知数':10s} {'入力数':10s} {'入力率':10s}")
+    output.append("-" * 80)
+    
+    user_stats = []
+    
+    for user_id, period in EXPERIMENT_PERIODS.items():
+        # 感情記録を取得
+        df = fetch_emotion_records(db, user_id)
+        
+        if df.empty:
+            output.append(f"{user_id:10s} データなし")
+            continue
+        
+        # 実験期間内のデータをフィルタ
+        start_datetime = datetime.combine(period['start'], datetime.min.time())
+        end_datetime = datetime.combine(period['end'], datetime.max.time())
+        df_period = df[(df['datetime'] >= start_datetime) & (df['datetime'] <= end_datetime)]
+        
+        # 統計を計算
+        days = (period['end'] - period['start']).days + 1
+        total_notifications = days * NOTIFICATIONS_PER_DAY
+        input_count = len(df_period)
+        response_rate = (input_count / total_notifications * 100) if total_notifications > 0 else 0
+        
+        period_str = f"{period['start']} ~ {period['end']}"
+        output.append(f"{user_id:10s} {period_str:25s} {days:5d}日 {total_notifications:10d}回 {input_count:10d}回 {response_rate:9.1f}%")
+        
+        user_stats.append({
+            'user_id': user_id,
+            'start_date': period['start'],
+            'end_date': period['end'],
+            'days': days,
+            'total_notifications': total_notifications,
+            'input_count': input_count,
+            'response_rate': response_rate
+        })
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return pd.DataFrame(user_stats)
+
+
+def calculate_daily_response_rate(db, report_file):
+    """経過日数ごとの回答率の平均値を計算"""
+    all_daily_rates = []
+    
+    for user_id, period in EXPERIMENT_PERIODS.items():
+        # 感情記録を取得
+        df = fetch_emotion_records(db, user_id)
+        
+        if df.empty:
+            continue
+        
+        # 実験期間内のデータをフィルタ
+        start_datetime = datetime.combine(period['start'], datetime.min.time())
+        end_datetime = datetime.combine(period['end'], datetime.max.time())
+        df_period = df[(df['datetime'] >= start_datetime) & (df['datetime'] <= end_datetime)]
+        
+        # 日付ごとの入力数を集計
+        df_period['date'] = df_period['datetime'].dt.date
+        daily_counts = df_period.groupby('date').size()
+        
+        # 実験期間の全日付を生成
+        date_range = pd.date_range(start=period['start'], end=period['end'], freq='D')
+        
+        for i, current_date in enumerate(date_range):
+            elapsed_days = i + 1
+            date_obj = current_date.date()
+            count = daily_counts.get(date_obj, 0)
+            rate = (count / NOTIFICATIONS_PER_DAY * 100) if NOTIFICATIONS_PER_DAY > 0 else 0
+            
+            all_daily_rates.append({
+                'user_id': user_id,
+                'elapsed_days': elapsed_days,
+                'date': date_obj,
+                'count': count,
+                'rate': rate
+            })
+    
+    df_daily = pd.DataFrame(all_daily_rates)
+    
+    if df_daily.empty:
+        output = ["\n経過日数ごとの回答率データがありません"]
+        for line in output:
+            print(line)
+            report_file.write(line + "\n")
+        return df_daily
+    
+    # 経過日数ごとの平均回答率を計算
+    avg_rates = df_daily.groupby('elapsed_days')['rate'].mean().reset_index()
+    
+    output = []
+    output.append("\n経過日数ごとの平均回答率")
+    output.append("-" * 40)
+    output.append(f"{'経過日数':10s} {'平均回答率':15s}")
+    output.append("-" * 40)
+    
+    for _, row in avg_rates.iterrows():
+        output.append(f"{int(row['elapsed_days']):10d}日目 {row['rate']:14.1f}%")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return df_daily
+
+
+def plot_response_rate_by_elapsed_days(df_daily, report_file):
+    """経過日数ごとの平均回答率を折れ線グラフで可視化"""
+    if df_daily.empty:
+        return
+    
+    # 経過日数ごとの平均回答率を計算
+    avg_rates = df_daily.groupby('elapsed_days')['rate'].mean().reset_index()
+    
+    # グラフを作成
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # 折れ線グラフを描画
+    ax.plot(avg_rates['elapsed_days'], avg_rates['rate'], 
+            marker='o', linewidth=2, color='#4A90E2', markersize=6)
+    
+    # グラフの装飾
+    ax.set_xlabel('実験開始からの経過日数', fontsize=14)
+    ax.set_ylabel('平均回答率 (%)', fontsize=14)
+    ax.set_title('経過日数ごとの平均回答率の推移', fontsize=16, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.3)
+    ax.set_ylim(0, 100)
+    
+    # X軸の目盛りを設定
+    ax.set_xticks(range(1, int(avg_rates['elapsed_days'].max()) + 1, 2))
+    
+    plt.tight_layout()
+    
+    # グラフを保存
+    plt.savefig('response_rate_by_elapsed_days.png', dpi=300, bbox_inches='tight')
+    print("\nグラフを response_rate_by_elapsed_days.png に保存しました")
+    report_file.write("\nグラフを response_rate_by_elapsed_days.png に保存しました\n")
+    
+    plt.close()
+
+
+def plot_response_rate_by_user_and_days(df_daily, report_file):
+    """ユーザーごとの経過日数別回答率を折れ線グラフで可視化"""
+    if df_daily.empty:
+        return
+    
+    # グラフを作成
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # 各ユーザーの折れ線グラフを描画
+    colors = ['#4A90E2', '#E24A4A', '#4AE290', '#E2904A', '#904AE2']
+    for i, user_id in enumerate(sorted(df_daily['user_id'].unique())):
+        user_data = df_daily[df_daily['user_id'] == user_id]
+        user_rates = user_data.groupby('elapsed_days')['rate'].mean().reset_index()
+        
+        ax.plot(user_rates['elapsed_days'], user_rates['rate'], 
+                marker='o', label=user_id, linewidth=2, 
+                color=colors[i % len(colors)], markersize=5, alpha=0.7)
+    
+    # グラフの装飾
+    ax.set_xlabel('実験開始からの経過日数', fontsize=14)
+    ax.set_ylabel('回答率 (%)', fontsize=14)
+    ax.set_title('ユーザーごとの経過日数別回答率', fontsize=16, fontweight='bold')
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.grid(True, linestyle='--', alpha=0.3)
+    ax.set_ylim(0, 100)
+    
+    plt.tight_layout()
+    
+    # グラフを保存
+    plt.savefig('response_rate_by_user_and_days.png', dpi=300, bbox_inches='tight')
+    print("グラフを response_rate_by_user_and_days.png に保存しました")
+    report_file.write("グラフを response_rate_by_user_and_days.png に保存しました\n")
+    
+    plt.close()
+
+
 def main():
     """メイン処理"""
     # レポートファイルを開く
@@ -419,18 +775,20 @@ def main():
     try:
         # Firebase初期化
         if not firebase_admin._apps:
-            # 環境に応じて適切な認証方法を選択
             try:
+                # ローカル環境の場合: config.pyからパスを取得
+                from config import FIREBASE_CREDENTIALS_PATH
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+                print(f"Firebase認証情報を読み込みました: {FIREBASE_CREDENTIALS_PATH}")
+            except ImportError:
                 # Streamlit Cloud環境の場合
                 import streamlit as st
                 cred_dict = dict(st.secrets["firebase_credentials"])
                 cred = credentials.Certificate(cred_dict)
-            except:
-                # ローカル環境の場合
-                from config import FIREBASE_CREDENTIALS_PATH
-                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+                print("Streamlit Secretsから認証情報を読み込みました")
             
             firebase_admin.initialize_app(cred)
+            print("Firebase初期化完了")
         
         db = firestore.client()
         if db is None:
@@ -439,47 +797,78 @@ def main():
             report_file.write(message + "\n")
             return
         
+        print("Firestoreクライアント接続完了")
+        
         # 全期間のアクセスログを取得
+        print("\nアクセスログを取得中...")
         df = fetch_access_logs(db)
         
         if df.empty:
             message = "アクセスログがありません"
             print(message)
             report_file.write(message + "\n")
-            return
+            # アクセスログがなくても感情入力率は計算可能
+        else:
+            print(f"アクセスログ取得完了: {len(df)}件")
         
         # ページビューログを取得
+        print("ページビューログを取得中...")
         page_views_df = fetch_page_views(db)
+        print(f"ページビューログ取得完了: {len(page_views_df)}件")
         
         # 基本情報
-        header = f"アクセスログ分析レポート (総件数: {len(df)}件)"
-        period = f"期間: {df['timestamp'].min().strftime('%Y-%m-%d %H:%M')} ～ {df['timestamp'].max().strftime('%Y-%m-%d %H:%M')}"
+        if not df.empty:
+            header = f"アクセスログ分析レポート (総件数: {len(df)}件)"
+            period = f"期間: {df['timestamp'].min().strftime('%Y-%m-%d %H:%M')} ～ {df['timestamp'].max().strftime('%Y-%m-%d %H:%M')}"
+            
+            print(header)
+            print(period)
+            report_file.write(header + "\n")
+            report_file.write(period + "\n")
+            
+            # 各種分析を実行
+            analyze_user_access_counts(df, report_file)
+            analyze_session_counts(df, report_file)
+            analyze_view_mode_counts(df, report_file)
+            analyze_user_view_modes(df, report_file)
+            analyze_daily_access(df, report_file)
+            
+            # 閲覧時間の分析を追加
+            if not page_views_df.empty:
+                analyze_viewing_duration(page_views_df, report_file)
+                analyze_view_mode_duration(page_views_df, report_file)
+                analyze_user_mode_duration(page_views_df, report_file)
+            
+            # グラフ生成
+            target_users = ['user21', 'user22', 'user23', 'user24', 'user25']
+            plot_user_access_counts(df, report_file, target_users=target_users)
+            plot_daily_access_by_user(df, report_file, target_users=target_users)
+            
+            # CSVに保存
+            save_analysis_to_csv(df)
         
-        print(header)
-        print(period)
-        report_file.write(header + "\n")
-        report_file.write(period + "\n")
+        # 感情入力率の分析
+        print("\n感情入力率を計算中...")
+        user_response_stats = calculate_response_rate_by_user(db, report_file)
         
-        # 各種分析を実行
-        analyze_user_access_counts(df, report_file)
-        analyze_session_counts(df, report_file)
-        analyze_view_mode_counts(df, report_file)
-        analyze_user_view_modes(df, report_file)
-        analyze_daily_access(df, report_file)
+        print("経過日数ごとの回答率を計算中...")
+        df_daily = calculate_daily_response_rate(db, report_file)
         
-        # 閲覧時間の分析を追加
-        if not page_views_df.empty:
-            analyze_viewing_duration(page_views_df, report_file)
-            analyze_view_mode_duration(page_views_df, report_file)
-            analyze_user_mode_duration(page_views_df, report_file)
-        
-        # CSVに保存
-        save_analysis_to_csv(df)
+        if not df_daily.empty:
+            plot_response_rate_by_elapsed_days(df_daily, report_file)
+            plot_response_rate_by_user_and_days(df_daily, report_file)
         
         # レポート保存完了メッセージ
         final_message = "\n分析完了: log_report.txt に保存しました"
         print(final_message)
         report_file.write(final_message + "\n")
+        
+    except Exception as e:
+        error_message = f"\nエラーが発生しました: {str(e)}"
+        print(error_message)
+        report_file.write(error_message + "\n")
+        import traceback
+        traceback.print_exc()
         
     finally:
         report_file.close()
