@@ -241,9 +241,9 @@ def plot_response_rate_by_elapsed_days(df_daily, report_file):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('response_rate_by_elapsed_days.png', dpi=300, bbox_inches='tight')
-    print("\nグラフを response_rate_by_elapsed_days.png に保存しました")
-    report_file.write("\nグラフを response_rate_by_elapsed_days.png に保存しました\n")
+    plt.savefig('response_rate_by_elapsed_days.pdf', dpi=300, bbox_inches='tight', format='pdf')
+    print("\nグラフを response_rate_by_elapsed_days.pdf に保存しました")
+    report_file.write("\nグラフを response_rate_by_elapsed_days.pdf に保存しました\n")
     
     plt.close()
 
@@ -303,9 +303,9 @@ def plot_response_rate_by_user_and_days(df_daily, report_file):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('response_rate_by_user_and_days.png', dpi=300, bbox_inches='tight')
-    print("グラフを response_rate_by_user_and_days.png に保存しました")
-    report_file.write("グラフを response_rate_by_user_and_days.png に保存しました\n")
+    plt.savefig('response_rate_by_user_and_days.pdf', dpi=300, bbox_inches='tight', format='pdf')
+    print("グラフを response_rate_by_user_and_days.pdf に保存しました")
+    report_file.write("グラフを response_rate_by_user_and_days.pdf に保存しました\n")
     
     plt.close()
 
@@ -354,9 +354,9 @@ def plot_response_rate_by_group(df_daily, report_file):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('response_rate_by_group.png', dpi=300, bbox_inches='tight')
-    print("グラフを response_rate_by_group.png に保存しました")
-    report_file.write("グラフを response_rate_by_group.png に保存しました\n")
+    plt.savefig('response_rate_by_group.pdf', dpi=300, bbox_inches='tight', format='pdf')
+    print("グラフを response_rate_by_group.pdf に保存しました")
+    report_file.write("グラフを response_rate_by_group.pdf に保存しました\n")
     
     plt.close()
     

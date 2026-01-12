@@ -474,9 +474,9 @@ def plot_user_access_counts(df, report_file, target_users=None):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('user_access_counts.png', dpi=300, bbox_inches='tight')
-    print("\nグラフを user_access_counts.png に保存しました")
-    report_file.write("\nグラフを user_access_counts.png に保存しました\n")
+    plt.savefig('user_access_counts.svg', dpi=300, bbox_inches='tight', format='svg')
+    print("\nグラフを user_access_counts.svg に保存しました")
+    report_file.write("\nグラフを user_access_counts.svg に保存しました\n")
     
     plt.close()
     
@@ -531,9 +531,9 @@ def plot_daily_access_by_user(df, report_file, target_users=None):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('daily_access_by_user.png', dpi=300, bbox_inches='tight')
-    print("グラフを daily_access_by_user.png に保存しました")
-    report_file.write("グラフを daily_access_by_user.png に保存しました\n")
+    plt.savefig('daily_access_by_user.svg', dpi=300, bbox_inches='tight', format='svg')
+    print("グラフを daily_access_by_user.svg に保存しました")
+    report_file.write("グラフを daily_access_by_user.svg に保存しました\n")
     
     plt.close()
     
@@ -767,6 +767,207 @@ def plot_response_rate_by_user_and_days(df_daily, report_file):
     plt.close()
 
 
+def analyze_user_access_counts_from_page_views(db, report_file):
+    """ユーザーごとのアクセス回数を集計（page_viewsコレクションから取得）"""
+    if not db:
+        return
+    
+    output = []
+    output.append("\n各ユーザーのアクセス回数（page_viewsコレクションから）")
+    output.append("-" * 60)
+    output.append(f"{'ユーザーID':15s} {'アクセス回数':15s} {'割合':15s}")
+    output.append("-" * 60)
+    
+    user_access_counts = {}
+    total_access = 0
+    
+    try:
+        # usersコレクションを取得
+        users_ref = db.collection('users')
+        users = users_ref.stream()
+        
+        for user_doc in users:
+            user_id = user_doc.id
+            
+            # 各ユーザーのpage_viewsコレクションを取得
+            page_views_query = db.collection('users').document(user_id).collection('page_views')
+            page_views_docs = page_views_query.stream()
+            
+            # start_timeフィールドが存在するドキュメントをカウント
+            access_count = 0
+            for page_view_doc in page_views_docs:
+                page_view_data = page_view_doc.to_dict()
+                
+                # start_timeフィールドが存在することを確認
+                if 'start_time' in page_view_data and page_view_data['start_time'] is not None:
+                    access_count += 1
+            
+            if access_count > 0:
+                user_access_counts[user_id] = access_count
+                total_access += access_count
+    
+    except Exception as e:
+        print(f"page_viewsコレクション読み込みエラー: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # ソートして出力
+    for user_id in sorted(user_access_counts.keys()):
+        count = user_access_counts[user_id]
+        percentage = (count / total_access * 100) if total_access > 0 else 0
+        output.append(f"{user_id:15s} {count:15d}回 {percentage:14.1f}%")
+    
+    output.append("-" * 60)
+    output.append(f"{'合計':15s} {total_access:15d}回 {100.0:14.1f}%")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return user_access_counts
+
+
+def analyze_user_access_by_view_mode_from_page_views(db, report_file):
+    """ユーザーごとの表示モード別アクセス回数を集計（page_viewsコレクションから）"""
+    if not db:
+        return
+    
+    output = []
+    output.append("\n各ユーザーの表示モード別アクセス回数（page_viewsコレクションから）")
+    output.append("=" * 100)
+    
+    user_mode_data = {}
+    
+    try:
+        # usersコレクションを取得
+        users_ref = db.collection('users')
+        users = users_ref.stream()
+        
+        for user_doc in users:
+            user_id = user_doc.id
+            user_mode_data[user_id] = {}
+            
+            # 各ユーザーのpage_viewsコレクションを取得
+            page_views_query = db.collection('users').document(user_id).collection('page_views')
+            page_views_docs = page_views_query.stream()
+            
+            # view_modeごとにカウント
+            for page_view_doc in page_views_docs:
+                page_view_data = page_view_doc.to_dict()
+                
+                # start_timeが存在し、view_modeフィールドがある場合
+                if 'start_time' in page_view_data and page_view_data['start_time'] is not None:
+                    view_mode = page_view_data.get('view_mode', '不明')
+                    
+                    if view_mode not in user_mode_data[user_id]:
+                        user_mode_data[user_id][view_mode] = 0
+                    
+                    user_mode_data[user_id][view_mode] += 1
+    
+    except Exception as e:
+        print(f"page_viewsコレクション読み込みエラー: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # ヘッダー行を作成
+    all_modes = set()
+    for user_modes in user_mode_data.values():
+        all_modes.update(user_modes.keys())
+    
+    all_modes = sorted(list(all_modes))
+    
+    output.append(f"{'ユーザーID':15s}", end='')
+    for mode in all_modes:
+        output.append(f" {mode:15s}")
+    output.append('')
+    output.append("-" * (15 + len(all_modes) * 16))
+    
+    # 各ユーザーのデータを出力
+    for user_id in sorted(user_mode_data.keys()):
+        line = f"{user_id:15s}"
+        for mode in all_modes:
+            count = user_mode_data[user_id].get(mode, 0)
+            line += f" {count:15d}"
+        output.append(line)
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return user_mode_data
+
+
+def analyze_daily_access_from_page_views(db, report_file):
+    """日別アクセス数を集計（page_viewsコレクションから）"""
+    if not db:
+        return
+    
+    output = []
+    output.append("\n日別アクセス数（page_viewsコレクションから）")
+    output.append("-" * 40)
+    output.append(f"{'日付':15s} {'アクセス数':15s}")
+    output.append("-" * 40)
+    
+    daily_counts = {}
+    
+    try:
+        # usersコレクションを取得
+        users_ref = db.collection('users')
+        users = users_ref.stream()
+        
+        for user_doc in users:
+            user_id = user_doc.id
+            
+            # 各ユーザーのpage_viewsコレクションを取得
+            page_views_query = db.collection('users').document(user_id).collection('page_views')
+            page_views_docs = page_views_query.stream()
+            
+            # start_timeから日付を抽出してカウント
+            for page_view_doc in page_views_docs:
+                page_view_data = page_view_doc.to_dict()
+                
+                if 'start_time' in page_view_data and page_view_data['start_time'] is not None:
+                    start_time = page_view_data['start_time']
+                    
+                    # Timestamp型をdateに変換
+                    if hasattr(start_time, 'date'):
+                        date_key = str(start_time.date())
+                    else:
+                        date_key = pd.to_datetime(start_time).strftime('%Y-%m-%d')
+                    
+                    if date_key not in daily_counts:
+                        daily_counts[date_key] = 0
+                    
+                    daily_counts[date_key] += 1
+    
+    except Exception as e:
+        print(f"page_viewsコレクション読み込みエラー: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # ソートして出力
+    total_access = 0
+    for date_key in sorted(daily_counts.keys()):
+        count = daily_counts[date_key]
+        output.append(f"{date_key:15s} {count:15d}回")
+        total_access += count
+    
+    output.append("-" * 40)
+    output.append(f"{'合計':15s} {total_access:15d}回")
+    
+    # コンソールとファイルの両方に出力
+    for line in output:
+        print(line)
+        report_file.write(line + "\n")
+    
+    return daily_counts
+
+
 def main():
     """メイン処理"""
     # レポートファイルを開く
@@ -776,12 +977,10 @@ def main():
         # Firebase初期化
         if not firebase_admin._apps:
             try:
-                # ローカル環境の場合: config.pyからパスを取得
                 from config import FIREBASE_CREDENTIALS_PATH
                 cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
                 print(f"Firebase認証情報を読み込みました: {FIREBASE_CREDENTIALS_PATH}")
             except ImportError:
-                # Streamlit Cloud環境の場合
                 import streamlit as st
                 cred_dict = dict(st.secrets["firebase_credentials"])
                 cred = credentials.Certificate(cred_dict)
@@ -799,64 +998,20 @@ def main():
         
         print("Firestoreクライアント接続完了")
         
-        # 全期間のアクセスログを取得
-        print("\nアクセスログを取得中...")
-        df = fetch_access_logs(db)
+        # ===== page_viewsコレクションからのアクセス分析 =====
+        print("\n【page_viewsコレクションからのアクセス分析】")
         
-        if df.empty:
-            message = "アクセスログがありません"
-            print(message)
-            report_file.write(message + "\n")
-            # アクセスログがなくても感情入力率は計算可能
-        else:
-            print(f"アクセスログ取得完了: {len(df)}件")
+        # ユーザーごとのアクセス回数
+        print("ユーザーごとのアクセス回数を集計中...")
+        user_access_counts = analyze_user_access_counts_from_page_views(db, report_file)
         
-        # ページビューログを取得
-        print("ページビューログを取得中...")
-        page_views_df = fetch_page_views(db)
-        print(f"ページビューログ取得完了: {len(page_views_df)}件")
+        # ユーザーごとの表示モード別アクセス回数
+        print("表示モード別アクセス回数を集計中...")
+        user_mode_data = analyze_user_access_by_view_mode_from_page_views(db, report_file)
         
-        # 基本情報
-        if not df.empty:
-            header = f"アクセスログ分析レポート (総件数: {len(df)}件)"
-            period = f"期間: {df['timestamp'].min().strftime('%Y-%m-%d %H:%M')} ～ {df['timestamp'].max().strftime('%Y-%m-%d %H:%M')}"
-            
-            print(header)
-            print(period)
-            report_file.write(header + "\n")
-            report_file.write(period + "\n")
-            
-            # 各種分析を実行
-            analyze_user_access_counts(df, report_file)
-            analyze_session_counts(df, report_file)
-            analyze_view_mode_counts(df, report_file)
-            analyze_user_view_modes(df, report_file)
-            analyze_daily_access(df, report_file)
-            
-            # 閲覧時間の分析を追加
-            if not page_views_df.empty:
-                analyze_viewing_duration(page_views_df, report_file)
-                analyze_view_mode_duration(page_views_df, report_file)
-                analyze_user_mode_duration(page_views_df, report_file)
-            
-            # グラフ生成
-            target_users = ['user21', 'user22', 'user23', 'user24', 'user25']
-            plot_user_access_counts(df, report_file, target_users=target_users)
-            plot_daily_access_by_user(df, report_file, target_users=target_users)
-            
-            # CSVに保存
-            save_analysis_to_csv(df)
-        
-        # 感情入力率の分析
-        print("\n感情入力率を計算中...")
-        user_response_stats = calculate_response_rate_by_user(db, report_file)
-        
-        print("経過日数ごとの回答率を計算中...")
-        df_daily = calculate_daily_response_rate(db, report_file)
-        
-        if not df_daily.empty:
-            plot_response_rate_by_elapsed_days(df_daily, report_file)
-            plot_response_rate_by_user_and_days(df_daily, report_file)
+        # 日別アクセス数
+        print("日別アクセス数を集計中...")
+        daily_counts = analyze_daily_access_from_page_views(db, report_file)
         
         # レポート保存完了メッセージ
         final_message = "\n分析完了: log_report.txt に保存しました"

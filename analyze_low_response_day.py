@@ -155,8 +155,8 @@ def plot_low_response_day(user_details_df, target_elapsed_days=9, report_file=No
     plt.tight_layout()
     
     # グラフを保存
-    filename = f'response_rate_day{target_elapsed_days}_bocco.png'
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    filename = f'response_rate_day{target_elapsed_days}_bocco.pdf'
+    plt.savefig(filename, dpi=300, bbox_inches='tight', format='pdf')
     print(f"\nグラフを {filename} に保存しました")
     
     if report_file:

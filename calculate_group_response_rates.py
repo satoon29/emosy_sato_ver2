@@ -198,9 +198,9 @@ def plot_group_response_rates(group_stats_df, report_file):
     plt.tight_layout()
     
     # グラフを保存
-    plt.savefig('group_response_rates.png', dpi=300, bbox_inches='tight')
-    print("\nグラフを group_response_rates.png に保存しました")
-    report_file.write("\nグラフを group_response_rates.png に保存しました\n")
+    plt.savefig('group_response_rates.pdf', dpi=300, bbox_inches='tight', format='pdf')
+    print("\nグラフを group_response_rates.pdf に保存しました")
+    report_file.write("\nグラフを group_response_rates.pdf に保存しました\n")
     
     plt.close()
 
